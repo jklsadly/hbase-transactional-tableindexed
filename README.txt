@@ -17,5 +17,6 @@ Configuration:
   and
  'hbase.regionserver.impl' to 'org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer'
  
+
  
  For more details, looks at the package.html in the appropriate client package of the source. 
