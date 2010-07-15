@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.util.Progressable;
@@ -84,7 +85,7 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
         UncaughtExceptionHandler handler = new UncaughtExceptionHandler() {
 
             public void uncaughtException(final Thread t, final Throwable e) {
-                abort();
+                abort("Set stop flag in " + t.getName(), e);
                 LOG.fatal("Set stop flag in " + t.getName(), e);
             }
         };
@@ -95,18 +96,18 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
 
     private void initializeTHLog() throws IOException {
         // We keep in the same directory as the core HLog.
-        Path oldLogDir = new Path(getRootDir(), HREGION_OLDLOGDIR_NAME);
+        Path oldLogDir = new Path(getRootDir(), HLogSplitter.RECOVERED_EDITS);
         Path logdir = new Path(getRootDir(), HLog.getHLogDirectoryName(this.serverInfo));
 
         trxHLog = new THLog(getFileSystem(), logdir, oldLogDir, conf, null);
     }
 
     @Override
-    protected HRegion instantiateRegion(final HRegionInfo regionInfo) throws IOException {
+    protected HRegion instantiateRegion(final HRegionInfo regionInfo, final HLog log) throws IOException {
         HRegion r = new TransactionalRegion(HTableDescriptor.getTableDir(super.getRootDir(), regionInfo.getTableDesc()
                 .getName()), super.hlog, this.trxHLog, super.getFileSystem(), super.conf, regionInfo, super
                 .getFlushRequester(), this.getTransactionalLeases());
-        r.initialize(null, new Progressable() {
+        r.initialize(new Progressable() {
 
             public void progress() {
                 addProcessingMessage(regionInfo);

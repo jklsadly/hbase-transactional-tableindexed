@@ -51,10 +51,11 @@ public class KeyValueScanFixture implements KeyValueScanner {
     public KeyValue next() {
         KeyValue res = current;
 
-        if (iter.hasNext())
+        if (iter.hasNext()) {
             current = iter.next();
-        else
+        } else {
             current = null;
+        }
         return res;
     }
 

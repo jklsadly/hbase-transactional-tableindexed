@@ -42,7 +42,7 @@ class CleanOldTransactionsChore extends Chore {
   public CleanOldTransactionsChore(
       final TransactionalRegionServer regionServer,
       final AtomicBoolean stopRequest) {
-    super(regionServer.getConfiguration().getInt(SLEEP_CONF, DEFAULT_SLEEP),
+    super("CleanOldTransactions", regionServer.getConfiguration().getInt(SLEEP_CONF, DEFAULT_SLEEP),
         stopRequest);
     this.regionServer = regionServer;
   }

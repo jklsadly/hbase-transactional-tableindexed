@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionState.Status;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.util.Progressable;
 
@@ -113,9 +114,22 @@ public class TransactionalRegion extends HRegion {
     }
 
     @Override
+    protected long replayRecoveredEditsIfAny(final Path regiondir, final long minSeqId, final Progressable reporter)
+            throws UnsupportedEncodingException, IOException {
+        long maxSeqId = super.replayRecoveredEditsIfAny(regiondir, minSeqId, reporter);
+
+        // logfile name = Path oldLogFile = new Path(regiondir, HConstants.HREGION_OLDLOGFILE_NAME);
+        Path recoveredEdits = new Path(regiondir, HLogSplitter.RECOVERED_EDITS);
+
+        doReconstructionLog(recoveredEdits, minSeqId, maxSeqId, reporter);
+
+        return maxSeqId;
+    }
+
+    // @Override
     protected void doReconstructionLog(final Path oldCoreLogFile, final long minSeqId, final long maxSeqId,
             final Progressable reporter) throws UnsupportedEncodingException, IOException {
-        super.doReconstructionLog(oldCoreLogFile, minSeqId, maxSeqId, reporter);
+        // super.doReconstructionLog(oldCoreLogFile, minSeqId, maxSeqId, reporter);
 
         Path trxPath = new Path(oldCoreLogFile.getParent(), THLog.HREGION_OLD_THLOGFILE_NAME);
 
@@ -271,7 +285,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Add a write to the transaction. Does not get applied until commit process.
-     * 
+     *
      * @param transactionId
      * @param put
      * @throws IOException
@@ -285,7 +299,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Add multiple writes to the transaction. Does not get applied until commit process.
-     * 
+     *
      * @param transactionId
      * @param puts
      * @throws IOException
@@ -301,7 +315,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Add a delete to the transaction. Does not get applied until commit process.
-     * 
+     *
      * @param transactionId
      * @param delete
      * @throws IOException
@@ -386,7 +400,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Commit the transaction.
-     * 
+     *
      * @param transactionId
      * @throws IOException
      */
@@ -412,7 +426,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Abort the transaction.
-     * 
+     *
      * @param transactionId
      * @throws IOException
      */

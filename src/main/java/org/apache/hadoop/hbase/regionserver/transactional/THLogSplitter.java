@@ -13,7 +13,7 @@ import org.apache.hadoop.hbase.regionserver.wal.HLog.Writer;
 
 /**
  * Extend core THLog splitter to make it also split the transactional logs.
- * 
+ *
  * @author clint.morgan
  */
 public class THLogSplitter extends HLogSplitter {

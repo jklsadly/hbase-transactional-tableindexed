@@ -44,15 +44,16 @@ public class THLog extends HLog {
 
     /**
      * Get a writer for the WAL.
-     * 
+     *
      * @param path
      * @param conf
      * @return A WAL writer. Close when done with it.
      * @throws IOException
      */
-    public static Writer createWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
+     public static Writer createWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         try {
             HLog.Writer writer = new SequenceFileLogWriter(THLogKey.class);
+            // HLog.Writer writer = new SequenceFileLogWriter();
             writer.init(fs, path, conf);
             return writer;
         } catch (Exception e) {
@@ -62,14 +63,14 @@ public class THLog extends HLog {
         }
     }
 
-    @Override
+     @Override
     protected Writer createAWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         return createWriter(fs, path, conf);
     }
 
     /**
      * This is a convenience method that computes a new filename with a given file-number.
-     * 
+     *
      * @param fn
      * @return Path
      */
@@ -81,16 +82,17 @@ public class THLog extends HLog {
 
     /**
      * Get a reader for the WAL.
-     * 
+     *
      * @param fs
      * @param path
      * @param conf
      * @return A WAL reader. Close when done with it.
      * @throws IOException
      */
-    public static Reader getReader(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
+     public static Reader getReader(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         try {
             HLog.Reader reader = new SequenceFileLogReader(THLogKey.class);
+            // HLog.Reader reader = new SequenceFileLogReader();
             reader.init(fs, path, conf);
             return reader;
         } catch (Exception e) {
@@ -98,6 +100,11 @@ public class THLog extends HLog {
             ie.initCause(e);
             throw ie;
         }
+    }
+
+    @Override
+    protected THLogKey makeKey(final byte[] regionName, final byte[] tableName, final long seqnum, final long now) {
+        return new THLogKey(regionName, tableName, seqnum, now, null, -1);
     }
 
     /**
@@ -129,7 +136,7 @@ public class THLog extends HLog {
 
     /**
      * Write a general transaction op to the log. This covers: start, commit, and abort.
-     * 
+     *
      * @param regionInfo
      * @param now
      * @param txOp
@@ -147,7 +154,7 @@ public class THLog extends HLog {
 
     /**
      * Write a transactional state to the log for a commit request.
-     * 
+     *
      * @param regionInfo
      * @param update
      * @param transactionId

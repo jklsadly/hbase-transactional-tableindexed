@@ -19,6 +19,7 @@ import org.apache.hadoop.hbase.ipc.HBaseRPCProtocolVersion;
 import org.apache.hadoop.hbase.ipc.IndexedRegionInterface;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
+import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.util.Progressable;
 
 /**
@@ -39,11 +40,11 @@ public class IndexedRegionServer extends TransactionalRegionServer implements In
     }
 
     @Override
-    protected HRegion instantiateRegion(final HRegionInfo regionInfo) throws IOException {
+    protected HRegion instantiateRegion(final HRegionInfo regionInfo, final HLog hlog) throws IOException {
         HRegion r = new IndexedRegion(HTableDescriptor.getTableDir(super.getRootDir(), regionInfo.getTableDesc()
                 .getName()), super.hlog, super.getTransactionLog(), super.getFileSystem(), super.conf, regionInfo, super
                 .getFlushRequester(), super.getTransactionalLeases());
-        r.initialize(null, new Progressable() {
+        r.initialize(new Progressable() {
 
             public void progress() {
                 addProcessingMessage(regionInfo);
