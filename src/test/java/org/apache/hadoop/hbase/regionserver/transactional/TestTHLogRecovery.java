@@ -66,15 +66,10 @@ public class TestTHLogRecovery {
 
     @BeforeClass
     public static void setUpClass() throws Exception {
-        // Configuration conf = HBaseConfiguration.create();
 
         Configuration conf = TEST_UTIL.getConfiguration();
         conf.set(HConstants.REGION_SERVER_CLASS, TransactionalRegionInterface.class.getName());
         conf.set(HConstants.REGION_SERVER_IMPL, TransactionalRegionServer.class.getName());
-
-        // tweak conf?
-        // conf.set("hbase.regionserver.hlog.keyclass", "org.apache.hadoop.hbase.regionserver.transactional.THLogKey");
-
 
         // Set flush params so we don't get any
         // FIXME (defaults are probably fine)
@@ -85,12 +80,7 @@ public class TestTHLogRecovery {
         conf.setInt("hbase.client.pause", 10000); // increase client timeout
         conf.setInt("hbase.client.retries.number", 10); // increase HBase retries
 
-        // Not sure why this is required.
-        conf.set(HConstants.ZOOKEEPER_QUORUM, "127.0.0.1");
-
-        // TEST_UTIL = new HBaseTestingUtility(conf);
-
-        TEST_UTIL.startMiniCluster(3);
+        TEST_UTIL.startMiniCluster();
 
         // TEST_UTIL.getTestFileSystem().delete(new Path(conf.get(HConstants.HBASE_DIR)),
         // true);
@@ -105,7 +95,6 @@ public class TestTHLogRecovery {
     @AfterClass
     public static void tearDownClass() throws Throwable {
          TEST_UTIL.shutdownMiniCluster();
-        // TEST_UTIL.shutdownMiniDFSCluster();
     }
 
     @Before
