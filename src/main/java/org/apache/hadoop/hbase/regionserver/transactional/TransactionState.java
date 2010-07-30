@@ -35,7 +35,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
-import org.apache.hadoop.hbase.regionserver.QueryMatcher;
 import org.apache.hadoop.hbase.regionserver.ScanQueryMatcher;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -76,7 +75,7 @@ class TransactionState {
 
         /**
          * Check if this scan range contains the given key.
-         * 
+         *
          * @param rowKey
          * @return boolean
          */
@@ -158,7 +157,7 @@ class TransactionState {
 
     /**
      * GetFull from the writeSet.
-     * 
+     *
      * @param row
      * @param columns
      * @param timestamp
@@ -245,7 +244,7 @@ class TransactionState {
 
     /**
      * Get the status.
-     * 
+     *
      * @return Return the status.
      */
     Status getStatus() {
@@ -254,7 +253,7 @@ class TransactionState {
 
     /**
      * Set the status.
-     * 
+     *
      * @param status The status to set.
      */
     void setStatus(final Status status) {
@@ -263,7 +262,7 @@ class TransactionState {
 
     /**
      * Get the startSequenceNumber.
-     * 
+     *
      * @return Return the startSequenceNumber.
      */
     int getStartSequenceNumber() {
@@ -272,7 +271,7 @@ class TransactionState {
 
     /**
      * Set the startSequenceNumber.
-     * 
+     *
      * @param startSequenceNumber
      */
     void setStartSequenceNumber(final int startSequenceNumber) {
@@ -281,7 +280,7 @@ class TransactionState {
 
     /**
      * Get the sequenceNumber.
-     * 
+     *
      * @return Return the sequenceNumber.
      */
     Integer getSequenceNumber() {
@@ -290,7 +289,7 @@ class TransactionState {
 
     /**
      * Set the sequenceNumber.
-     * 
+     *
      * @param sequenceNumber The sequenceNumber to set.
      */
     void setSequenceNumber(final Integer sequenceNumber) {
@@ -323,7 +322,7 @@ class TransactionState {
 
     /**
      * Get the transactionId.
-     * 
+     *
      * @return Return the transactionId.
      */
     long getTransactionId() {
@@ -332,7 +331,7 @@ class TransactionState {
 
     /**
      * Get the startSequenceId.
-     * 
+     *
      * @return Return the startSequenceId.
      */
     long getHLogStartSequenceId() {
@@ -357,7 +356,7 @@ class TransactionState {
 
     /**
      * Get deleteSet.
-     * 
+     *
      * @return deleteSet
      */
     List<Delete> getDeleteSet() {
@@ -367,7 +366,7 @@ class TransactionState {
     /**
      * Get a scanner to go through the puts from this transaction. Used to weave together the local trx puts with the
      * global state.
-     * 
+     *
      * @return scanner
      */
     KeyValueScanner getScanner(final Scan scan) {
@@ -397,10 +396,11 @@ class TransactionState {
     private int getPutNumber(final KeyValue kv) {
         for (int i = 0; i < puts.size(); i++) {
             for (List<KeyValue> putKVs : puts.get(i).getFamilyMap().values()) {
-                for (KeyValue putKV : putKVs)
+                for (KeyValue putKV : putKVs) {
                     if (putKV == kv) {
                         return i;
                     }
+                }
             }
         }
         throw new IllegalStateException("Can not fine put KV in puts");
@@ -408,12 +408,12 @@ class TransactionState {
 
     /**
      * Scanner of the puts that occur during this transaction.
-     * 
+     *
      * @author clint.morgan
      */
     private class PutScanner extends KeyValueScanFixture implements InternalScanner {
 
-        private QueryMatcher matcher;
+        private ScanQueryMatcher matcher;
 
         PutScanner(final Scan scan) {
             super(new KeyValue.KVComparator() {
@@ -439,7 +439,7 @@ class TransactionState {
 
         /**
          * Get the next row of values from this Store.
-         * 
+         *
          * @param outResult
          * @param limit
          * @return true if there are more rows, false if scanner is done
@@ -455,13 +455,13 @@ class TransactionState {
             KeyValue kv;
             List<KeyValue> results = new ArrayList<KeyValue>();
             LOOP: while ((kv = this.peek()) != null) {
-                QueryMatcher.MatchCode qcode = matcher.match(kv);
+                ScanQueryMatcher.MatchCode qcode = matcher.match(kv);
                 // DebugPrint.println("SS peek kv = " + kv + " with qcode = " + qcode);
                 switch (qcode) {
                     case INCLUDE:
                         KeyValue next = this.next();
                         results.add(next);
-                        if (limit > 0 && (results.size() == limit)) {
+                        if (limit > 0 && results.size() == limit) {
                             break LOOP;
                         }
                         continue;
