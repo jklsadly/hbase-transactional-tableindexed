@@ -11,6 +11,8 @@
 package org.apache.hadoop.hbase.client.tableindexed;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 import junit.framework.Assert;
@@ -92,6 +94,73 @@ public class TestIndexedTable {
         table = new IndexedTable(TEST_UTIL.getConfiguration(), desc.getName());
     }
 
+
+
+    @Test
+    public void testInitialWrites() throws IOException {
+        writeInitalRows();
+        assertRowsInOrder(NUM_ROWS);
+    }
+
+
+    @Test
+    public void testMultipleWrites() throws IOException {
+        writeInitalRows();
+        writeInitalRows(); // Update the rows.
+        writeRowsMultiPut(); // Update the rows.
+        assertRowsInOrder(NUM_ROWS);
+    }
+
+    @Test
+    public void testDelete() throws IOException {
+        writeInitalRows();
+        // Delete the first row;
+        table.delete(new Delete(PerformanceEvaluation.format(0)));
+
+        assertRowsInOrder(NUM_ROWS - 1);
+    }
+
+    @Test
+    public void testRowUpdate() throws IOException {
+        writeInitalRows();
+        int row = NUM_ROWS - 2;
+        int value = MAX_VAL + 111;
+        updateRow(row, value);
+        assertRowUpdated(row, value);
+    }
+
+
+
+    @Test
+    public void testLockedRowUpdate() throws IOException {
+        writeInitalRows();
+        int row = NUM_ROWS - 2;
+        int value = MAX_VAL + 111;
+        updateLockedRow(row, value);
+        assertRowUpdated(row, value);
+    }
+
+    @Test
+    public void testLockedRowUpdateNoAutoFlush() throws IOException {
+        writeInitalRows();
+        int row = NUM_ROWS - 4;
+        int value = MAX_VAL + 2222;
+        updateLockedRowNoAutoFlush(row, value);
+        assertRowUpdated(row, value);
+    }
+
+    @Test
+    public void testLockedRowDelete() throws IOException {
+        writeInitalRows();
+        // Delete the first row;
+        byte[] row = PerformanceEvaluation.format(0);
+        RowLock lock = table.lockRow(row);
+        table.delete(new Delete(row, HConstants.LATEST_TIMESTAMP, lock));
+        table.unlockRow(lock);
+
+        assertRowDeleted(NUM_ROWS - 1);
+    }
+
     private void writeInitalRows() throws IOException {
         for (int i = 0; i < NUM_ROWS; i++) {
             Put update = new Put(PerformanceEvaluation.format(i));
@@ -102,10 +171,17 @@ public class TestIndexedTable {
         }
     }
 
-    @Test
-    public void testInitialWrites() throws IOException {
-        writeInitalRows();
-        assertRowsInOrder(NUM_ROWS);
+    private void writeRowsMultiPut() throws IOException {
+        List<Put> puts = new ArrayList<Put>(NUM_ROWS);
+        for (int i = 0; i < NUM_ROWS; i++) {
+            Put update = new Put(PerformanceEvaluation.format(i));
+            byte[] valueA = PerformanceEvaluation.format(random.nextInt(MAX_VAL));
+            update.add(FAMILY, QUAL_A, valueA);
+            puts.add(update);
+            LOG.info("Inserted row [" + Bytes.toString(update.getRow()) + "] val: [" + Bytes.toString(valueA) + "]");
+        }
+
+        table.put(puts);
     }
 
     private void assertRowsInOrder(final int numRowsExpected) throws IndexNotFoundException, IOException {
@@ -194,60 +270,5 @@ public class TestIndexedTable {
         table.flushCommits();
         table.close();
         table = new IndexedTable(TEST_UTIL.getConfiguration(), desc.getName());
-    }
-
-    @Test
-    public void testMultipleWrites() throws IOException {
-        writeInitalRows();
-        writeInitalRows(); // Update the rows.
-        assertRowsInOrder(NUM_ROWS);
-    }
-
-    @Test
-    public void testDelete() throws IOException {
-        writeInitalRows();
-        // Delete the first row;
-        table.delete(new Delete(PerformanceEvaluation.format(0)));
-
-        assertRowsInOrder(NUM_ROWS - 1);
-    }
-
-    @Test
-    public void testRowUpdate() throws IOException {
-        writeInitalRows();
-        int row = NUM_ROWS - 2;
-        int value = MAX_VAL + 111;
-        updateRow(row, value);
-        assertRowUpdated(row, value);
-    }
-
-    @Test
-    public void testLockedRowUpdate() throws IOException {
-        writeInitalRows();
-        int row = NUM_ROWS - 2;
-        int value = MAX_VAL + 111;
-        updateLockedRow(row, value);
-        assertRowUpdated(row, value);
-    }
-
-    @Test
-    public void testLockedRowUpdateNoAutoFlush() throws IOException {
-        writeInitalRows();
-        int row = NUM_ROWS - 4;
-        int value = MAX_VAL + 2222;
-        updateLockedRowNoAutoFlush(row, value);
-        assertRowUpdated(row, value);
-    }
-
-    @Test
-    public void testLockedRowDelete() throws IOException {
-        writeInitalRows();
-        // Delete the first row;
-        byte[] row = PerformanceEvaluation.format(0);
-        RowLock lock = table.lockRow(row);
-        table.delete(new Delete(row, HConstants.LATEST_TIMESTAMP, lock));
-        table.unlockRow(lock);
-
-        assertRowDeleted(NUM_ROWS - 1);
     }
 }

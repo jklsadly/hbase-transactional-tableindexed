@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Leases;
+import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -38,10 +39,12 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.tableindexed.IndexSpecification;
 import org.apache.hadoop.hbase.client.tableindexed.IndexedTableDescriptor;
 import org.apache.hadoop.hbase.regionserver.FlushRequester;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.transactional.THLog;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegion;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 
 class IndexedRegion extends TransactionalRegion {
 
@@ -76,15 +79,23 @@ class IndexedRegion extends TransactionalRegion {
     }
 
     /**
-     * @param batchUpdate
-     * @param lockid
-     * @param writeToWAL if true, then we write this update to the log
-     * @throws IOException
+     * {@inheritDoc}
      */
     @Override
     public void put(final Put put, final Integer lockId, final boolean writeToWAL) throws IOException {
         updateIndexes(put, lockId); // Do this first because will want to see the old row
         super.put(put, lockId, writeToWAL);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public OperationStatusCode[] put(Pair<Put, Integer>[] putsAndLocks) throws IOException {
+        for (Pair<Put, Integer> pair : putsAndLocks) {
+            updateIndexes(pair.getFirst(), pair.getSecond());
+        }
+        return super.put(putsAndLocks);
     }
 
     private void updateIndexes(final Put put, final Integer lockId) throws IOException {
