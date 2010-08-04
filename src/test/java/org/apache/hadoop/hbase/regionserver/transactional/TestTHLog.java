@@ -15,17 +15,14 @@ import java.util.Map;
 
 import junit.framework.Assert;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.transactional.TransactionLogger;
-import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
@@ -37,7 +34,7 @@ import org.junit.Test;
 /** JUnit test case for HLog */
 public class TestTHLog {
 
-     private static HBaseTestingUtility TEST_UTIL; // = new HBaseTestingUtility();
+    private final static HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
 
     private Path dir;
     private Path oldDir;
@@ -55,26 +52,8 @@ public class TestTHLog {
     final byte[] family = Bytes.toBytes("family");
     final byte[] column = Bytes.toBytes("a");
 
-    // static {
-    // final Configuration CONF = HBaseConfiguration.create();
-    // CONF.set("hbase.regionserver.hlog.keyclass", "org.apache.hadoop.hbase.regionserver.transactional.THLogKey");
-    // TEST_UTIL = new HBaseTestingUtility(CONF);
-    // }
-
     @BeforeClass
     public static void setUpClass() throws Exception {
-
-         Configuration conf = HBaseConfiguration.create();
-
-         conf.set(HConstants.REGION_SERVER_CLASS, TransactionalRegionInterface.class.getName());
-        conf.set(HConstants.REGION_SERVER_IMPL, TransactionalRegionServer.class.getName());
-
-        // // tweak conf?
-        conf.set("hbase.regionserver.hlog.keyclass", "org.apache.hadoop.hbase.regionserver.transactional.THLogKey");
-
-        TEST_UTIL = new HBaseTestingUtility(conf);
-
-        // TEST_UTIL.startMiniCluster(); // FIXME just need DFS
 
         TEST_UTIL.startMiniDFSCluster(3);
     }
@@ -98,7 +77,6 @@ public class TestTHLog {
 
     @AfterClass
     public static void tearDownClass() throws Exception {
-        // TEST_UTIL.shutdownMiniCluster();
         TEST_UTIL.shutdownMiniDFSCluster();
     }
 

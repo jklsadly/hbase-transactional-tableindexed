@@ -5,14 +5,15 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.apache</groupId>
 	<artifactId>hbase-trx</artifactId>
-	<version>0.89-DEV-1</version>
+	<version>0.89.0-DEV-1</version>
 	<packaging>jar</packaging>
 	<name>hbase-trx</name>
 	<description>transactional/indexing layers on top of hbase</description>
 	
 	<properties>
-		<hbase.version>0.89-DEV-1</hbase.version>
-	    <hadoop.version>0.20.3-append-r956776+1240+tail</hadoop.version>
+		<hbase.version>0.89.0-DEV-1-withHLogSplit</hbase.version>
+		<hadoop.version>0.20.3-append-r964955-1240</hadoop.version>
+	    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 	
 	<dependencies>
@@ -43,6 +44,20 @@
 	        <scope>test</scope>
       </dependency>
 	</dependencies>
+	
+	<repositories>
+	    <repository>
+      <id>temp-hadoop</id>
+      <name>Hadoop 0.20.1/2 packaging, thrift, zk</name>
+      <url>http://people.apache.org/~rawson/repo/</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+    </repository>
+    </repositories>
 	
 	 <build>
     <!-- Some plugins (javadoc for example) can be used in the normal build- and the site phase.
@@ -77,7 +92,7 @@
           <version>2.5</version>
           <configuration>
             <forkedProcessTimeoutInSeconds>3600</forkedProcessTimeoutInSeconds>
-            <argLine>-Xmx512m</argLine>
+            <argLine>-Xmx1g</argLine>
             <redirectTestOutputToFile>true</redirectTestOutputToFile>
           </configuration>
         </plugin>
