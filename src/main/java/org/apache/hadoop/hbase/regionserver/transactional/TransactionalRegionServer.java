@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.util.Threads;
+import org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException;
 import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.util.Progressable;
 
@@ -133,7 +134,39 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
         super.closeRegion(hri, reportWhenCompleted);
     }
 
-    public void abort(final byte[] regionName, final long transactionId) throws IOException {
+    /**
+     * Make sure transaction log gets closed on abort.
+     */
+    @Override
+    protected void cleanupOnAbort() throws IOException {
+        super.cleanupOnAbort();
+        if (null != trxHLog) {
+            trxHLog.close();
+        }
+    }
+
+    /**
+     * Make sure transaction log gets closed on shutdown. Currently the HRegion implementation will close it by wiping
+     * the whole log dir.
+     */
+    @Override
+    protected void cleanupOnShutdown() throws IOException {
+        super.cleanupOnShutdown();
+        try {
+            trxHLog.close();
+        } catch (IOException e) {
+            Throwable t = RemoteExceptionHandler.checkThrowable(e);
+            if (!(t instanceof LeaseExpiredException)) {
+                throw e;
+            }
+            LOG.info("Transaction log deleted along with HRegion log directory.");
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public void abortTransaction(final byte[] regionName, final long transactionId) throws IOException {
         checkOpen();
         super.getRequestCount().incrementAndGet();
         try {

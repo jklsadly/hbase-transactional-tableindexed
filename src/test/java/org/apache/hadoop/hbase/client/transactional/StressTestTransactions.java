@@ -23,13 +23,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
+import org.apache.hadoop.hbase.test.TestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -68,9 +67,7 @@ public class StressTestTransactions {
 
     @BeforeClass
     public static void setUpClass() throws Throwable {
-        Configuration conf = TEST_UTIL.getConfiguration();
-        conf.set(HConstants.REGION_SERVER_CLASS, TransactionalRegionInterface.class.getName());
-        conf.set(HConstants.REGION_SERVER_IMPL, TransactionalRegionServer.class.getName());
+        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
         TEST_UTIL.startMiniCluster(3);
     }
 

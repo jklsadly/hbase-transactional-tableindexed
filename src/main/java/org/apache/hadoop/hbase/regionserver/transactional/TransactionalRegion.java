@@ -507,6 +507,10 @@ public class TransactionalRegion extends HRegion {
      * Get ready to close.
      */
     void prepareToClose() {
+        if (closing) {
+            return;
+        }
+
         LOG.info("Preparing to close region " + getRegionInfo().getRegionNameAsString());
         closing = true;
 

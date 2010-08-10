@@ -149,5 +149,5 @@ public interface TransactionalRegionInterface extends HRegionInterface {
    * @param transactionId
    * @throws IOException
    */
-  void abort(final byte[] regionName, long transactionId) throws IOException;
+  void abortTransaction(final byte[] regionName, long transactionId) throws IOException;
 }

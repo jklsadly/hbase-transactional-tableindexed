@@ -196,7 +196,7 @@ public class TransactionManager {
                 TransactionalRegionInterface transactionalRegionServer = (TransactionalRegionInterface) connection
                         .getHRegionConnection(location.getServerAddress());
 
-                transactionalRegionServer.abort(location.getRegionInfo().getRegionName(), transactionState
+                transactionalRegionServer.abortTransaction(location.getRegionInfo().getRegionName(), transactionState
                         .getTransactionId());
             } catch (UnknownTransactionException e) {
                 LOG.info("Got unknown transaciton exception durring abort. Transaction: ["
