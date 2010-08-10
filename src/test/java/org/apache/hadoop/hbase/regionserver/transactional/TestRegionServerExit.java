@@ -21,9 +21,9 @@ package org.apache.hadoop.hbase.regionserver.transactional;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
+
 import org.apache.hadoop.hbase.regionserver.DisabledTestRegionServerExit;
+import org.apache.hadoop.hbase.test.TestUtil;
 
 /**
  * Tests unexpected exit of region server.
@@ -32,8 +32,7 @@ public class TestRegionServerExit extends DisabledTestRegionServerExit {
 
     public TestRegionServerExit() {
         super();
-        conf.set(HConstants.REGION_SERVER_CLASS, TransactionalRegionInterface.class.getName());
-        conf.set(HConstants.REGION_SERVER_IMPL, TransactionalRegionServer.class.getName());
+        TestUtil.configureForIndexingAndTransactions(conf);
     }
 
     @Override

@@ -17,6 +17,7 @@ import java.util.Random;
 
 import junit.framework.Assert;
 
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.RowLock;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegionServer;
+import org.apache.hadoop.hbase.test.TestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -61,7 +63,7 @@ public class TestIndexedTable {
      */
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        TEST_UTIL.getConfiguration().set(HConstants.REGION_SERVER_IMPL, IndexedRegionServer.class.getName());
+        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
 
         TEST_UTIL.startMiniCluster(3);
         setupTables();

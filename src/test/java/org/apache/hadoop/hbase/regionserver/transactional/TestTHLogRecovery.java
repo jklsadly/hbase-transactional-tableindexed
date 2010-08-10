@@ -22,12 +22,12 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.transactional.CommitUnsuccessfulException;
@@ -35,16 +35,15 @@ import org.apache.hadoop.hbase.client.transactional.HBaseBackedTransactionLogger
 import org.apache.hadoop.hbase.client.transactional.TransactionManager;
 import org.apache.hadoop.hbase.client.transactional.TransactionState;
 import org.apache.hadoop.hbase.client.transactional.TransactionalTable;
-import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
+import org.apache.hadoop.hbase.test.TestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestTHLogRecovery {
@@ -69,17 +68,10 @@ public class TestTHLogRecovery {
     public static void setUpClass() throws Exception {
 
         Configuration conf = TEST_UTIL.getConfiguration();
-        conf.set(HConstants.REGION_SERVER_CLASS, TransactionalRegionInterface.class.getName());
-        conf.set(HConstants.REGION_SERVER_IMPL, TransactionalRegionServer.class.getName());
+        TestUtil.configureForIndexingAndTransactions(conf);
 
         // Set flush params so we don't get any
         // FIXME (defaults are probably fine)
-
-        // Copied from TestRegionServerExit
-        conf.setInt("ipc.client.connect.max.retries", 5); // reduce ipc retries
-        conf.setInt("ipc.client.timeout", 10000); // and ipc timeout
-        conf.setInt("hbase.client.pause", 10000); // increase client timeout
-        conf.setInt("hbase.client.retries.number", 10); // increase HBase retries
 
         TEST_UTIL.startMiniCluster(3);
 
@@ -103,6 +95,8 @@ public class TestTHLogRecovery {
     @Before
     public void setUp() throws Exception {
         Configuration conf = TEST_UTIL.getConfiguration();
+        TestUtil.configureForIndexingAndTransactions(conf);
+
         table = new TransactionalTable(conf, TABLE_NAME);
         transactionManager = new TransactionManager(new HBaseBackedTransactionLogger(), conf);
         writeInitalRows();
@@ -131,36 +125,36 @@ public class TestTHLogRecovery {
         verifyWrites(8, 1, 1);
     }
 
-    @Ignore
+
     @Test
     public void testWithFlushBeforeCommit() throws IOException, CommitUnsuccessfulException {
-    // TransactionState state1 = makeTransaction(true);
-    // flushRegionServer();
-    // transactionManager.tryCommit(state1);
-    // abortRegionServer();
-    //
-    // Thread t = startVerificationThread(1);
-    // t.start();
-    // threadDumpingJoin(t);
-    // verifyWrites(8, 1, 1);
+        TransactionState state1 = makeTransaction(true);
+        flushRegionServer();
+        transactionManager.tryCommit(state1);
+        abortRegionServer();
+
+        Thread t = startVerificationThread(1);
+        t.start();
+        threadDumpingJoin(t);
+        verifyWrites(8, 1, 1);
     }
 
-    @Ignore
+
     @Test
     public void testWithFlushBeforeCommitThenAnother() throws IOException, CommitUnsuccessfulException {
-    // TransactionState state1 = makeTransaction(true);
-    // flushRegionServer();
-    // transactionManager.tryCommit(state1);
-    //
-    // TransactionState state2 = makeTransaction(false);
-    // transactionManager.tryCommit(state2);
-    //
-    // abortRegionServer();
-    //
-    // Thread t = startVerificationThread(1);
-    // t.start();
-    // threadDumpingJoin(t);
-    // verifyWrites(6, 2, 2);
+        TransactionState state1 = makeTransaction(true);
+        flushRegionServer();
+        transactionManager.tryCommit(state1);
+
+        TransactionState state2 = makeTransaction(false);
+        transactionManager.tryCommit(state2);
+
+        abortRegionServer();
+
+        Thread t = startVerificationThread(2);
+        t.start();
+        threadDumpingJoin(t);
+        verifyWrites(6, 2, 2);
     }
 
     private void flushRegionServer() {
@@ -261,7 +255,10 @@ public class TestTHLogRecovery {
     }
 
     private void verifyWrites(final int expectedRow1, final int expectedRow2, final int expectedRow3) throws IOException {
-        int row1 = Bytes.toInt(table.get(new Get(ROW1).addColumn(FAMILY, QUAL_A)).getValue(FAMILY, QUAL_A));
+        Get get = new Get(ROW1).addColumn(FAMILY, QUAL_A);
+        Result result =  table.get(get);
+        
+        int row1 = Bytes.toInt(result.getValue(FAMILY, QUAL_A));
         int row2 = Bytes.toInt(table.get(new Get(ROW2).addColumn(FAMILY, QUAL_A)).getValue(FAMILY, QUAL_A));
         int row3 = Bytes.toInt(table.get(new Get(ROW3).addColumn(FAMILY, QUAL_A)).getValue(FAMILY, QUAL_A));
         Assert.assertEquals(expectedRow1, row1);
@@ -285,6 +282,9 @@ public class TestTHLogRecovery {
                     Scan s = new Scan();
                     s.addColumn(FAMILY, QUAL_A);
                     ResultScanner scanner = t.getScanner(s);
+                    scanner.next();
+                    scanner.next();
+                    scanner.next();
                     scanner.close();
 
                 } catch (IOException e) {

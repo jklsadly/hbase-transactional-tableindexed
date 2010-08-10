@@ -14,6 +14,7 @@ import java.io.IOException;
 
 import junit.framework.Assert;
 
+
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -26,6 +27,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
+import org.apache.hadoop.hbase.test.TestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -58,8 +60,7 @@ public class TestTransactions {
      */
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        TEST_UTIL.getConfiguration().set(HConstants.REGION_SERVER_CLASS, TransactionalRegionInterface.class.getName());
-        TEST_UTIL.getConfiguration().set(HConstants.REGION_SERVER_IMPL, TransactionalRegionServer.class.getName());
+        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
 
         TEST_UTIL.startMiniCluster(3);
         setupTables();
