@@ -53,7 +53,6 @@ public class THLog extends HLog {
      public static Writer createWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         try {
             HLog.Writer writer = new SequenceFileLogWriter(THLogKey.class);
-            // HLog.Writer writer = new SequenceFileLogWriter();
             writer.init(fs, path, conf);
             return writer;
         } catch (Exception e) {
@@ -64,7 +63,7 @@ public class THLog extends HLog {
     }
 
      @Override
-    protected Writer createAWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
+    protected Writer createWriterInstance(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         return createWriter(fs, path, conf);
     }
 
@@ -92,7 +91,6 @@ public class THLog extends HLog {
      public static Reader getReader(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         try {
             HLog.Reader reader = new SequenceFileLogReader(THLogKey.class);
-            // HLog.Reader reader = new SequenceFileLogReader();
             reader.init(fs, path, conf);
             return reader;
         } catch (Exception e) {
