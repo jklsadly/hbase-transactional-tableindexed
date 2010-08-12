@@ -25,7 +25,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.transactional.TransactionLogger;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
-import org.apache.hadoop.hbase.test.TestUtil;
+import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -56,7 +56,7 @@ public class TestTHLog {
 
     @BeforeClass
     public static void setUpClass() throws Exception {
-        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
         TEST_UTIL.startMiniDFSCluster(3);
     }
 

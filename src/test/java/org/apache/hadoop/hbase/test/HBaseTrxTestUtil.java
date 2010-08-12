@@ -12,7 +12,7 @@ import org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegionServer;
 import org.apache.hadoop.hbase.regionserver.transactional.THLogSplitter;
 
 
-public class TestUtil {
+public class HBaseTrxTestUtil {
 
     public static void configureForIndexingAndTransactions(Configuration config) {
         config.set(HConstants.REGION_SERVER_CLASS, IndexedRegionInterface.class.getName());

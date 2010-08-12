@@ -24,11 +24,12 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
-import org.apache.hadoop.hbase.test.TestUtil;
+import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -57,7 +58,7 @@ public class TestTransactions {
      */
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
 
         TEST_UTIL.startMiniCluster(3);
         setupTables();
@@ -102,6 +103,8 @@ public class TestTransactions {
         transactionManager.tryCommit(transactionState2);
     }
 
+    // FIXME: We should write this test
+    @Ignore
     @Test
     public void testCompactionSplitOfTrxRegion() throws IOException, CommitUnsuccessfulException {
         Assert.fail("This test needs implementation.");

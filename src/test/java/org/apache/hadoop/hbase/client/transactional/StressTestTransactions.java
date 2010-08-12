@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
-import org.apache.hadoop.hbase.test.TestUtil;
+import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -67,7 +67,7 @@ public class StressTestTransactions {
 
     @BeforeClass
     public static void setUpClass() throws Throwable {
-        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
         TEST_UTIL.startMiniCluster(3);
     }
 

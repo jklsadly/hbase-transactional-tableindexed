@@ -37,7 +37,7 @@ import org.apache.hadoop.hbase.client.transactional.TransactionState;
 import org.apache.hadoop.hbase.client.transactional.TransactionalTable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.test.TestUtil;
+import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -68,7 +68,7 @@ public class TestTHLogRecovery {
     public static void setUpClass() throws Exception {
 
         Configuration conf = TEST_UTIL.getConfiguration();
-        TestUtil.configureForIndexingAndTransactions(conf);
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(conf);
 
         // Set flush params so we don't get any
         // FIXME (defaults are probably fine)
@@ -95,7 +95,7 @@ public class TestTHLogRecovery {
     @Before
     public void setUp() throws Exception {
         Configuration conf = TEST_UTIL.getConfiguration();
-        TestUtil.configureForIndexingAndTransactions(conf);
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(conf);
 
         table = new TransactionalTable(conf, TABLE_NAME);
         transactionManager = new TransactionManager(new HBaseBackedTransactionLogger(), conf);

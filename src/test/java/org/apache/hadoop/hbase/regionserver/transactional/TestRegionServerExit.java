@@ -19,25 +19,17 @@
  */
 package org.apache.hadoop.hbase.regionserver.transactional;
 
-import java.io.IOException;
-
-
 import org.apache.hadoop.hbase.regionserver.DisabledTestRegionServerExit;
-import org.apache.hadoop.hbase.test.TestUtil;
+import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 
 /**
- * Tests unexpected exit of region server.
+ * Tests unexpected exit of region server. This is just a basic extension of the same test in HBase except that it
+ * forces the use of our Transactional/Indexing classes.
  */
 public class TestRegionServerExit extends DisabledTestRegionServerExit {
 
     public TestRegionServerExit() {
         super();
-        TestUtil.configureForIndexingAndTransactions(conf);
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(conf);
     }
-
-    @Override
-    public void testAbort() throws IOException {
-        super.testAbort();
-    }
-
 }

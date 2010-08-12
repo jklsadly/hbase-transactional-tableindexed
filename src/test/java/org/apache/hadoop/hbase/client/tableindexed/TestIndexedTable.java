@@ -32,7 +32,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.RowLock;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegionServer;
-import org.apache.hadoop.hbase.test.TestUtil;
+import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -63,7 +63,7 @@ public class TestIndexedTable {
      */
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
-        TestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
+        HBaseTrxTestUtil.configureForIndexingAndTransactions(TEST_UTIL.getConfiguration());
 
         TEST_UTIL.startMiniCluster(3);
         setupTables();
