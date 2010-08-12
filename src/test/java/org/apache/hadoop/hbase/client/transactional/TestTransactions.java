@@ -14,10 +14,8 @@ import java.io.IOException;
 
 import junit.framework.Assert;
 
-
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -25,7 +23,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
 import org.apache.hadoop.hbase.test.TestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -103,6 +100,11 @@ public class TestTransactions {
 
         transactionManager.tryCommit(transactionState1);
         transactionManager.tryCommit(transactionState2);
+    }
+
+    @Test
+    public void testCompactionSplitOfTrxRegion() throws IOException, CommitUnsuccessfulException {
+        Assert.fail("This test needs implementation.");
     }
 
     @Test
