@@ -7,7 +7,7 @@ Configuration:
  One of the two regionserver extensions must be turned on by setting the appropriate configuration
  (in hbase-site.xml). 
  
- To enable just the indexing extension: set 
+ To enable the indexing extension: set 
  'hbase.regionserver.class' to 'org.apache.hadoop.hbase.ipc.IndexedRegionInterface' 
  and 
  'hbase.regionserver.impl' to 'org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegionServer'
@@ -16,7 +16,7 @@ Configuration:
  'hbase.regionserver.class' to 'org.apache.hadoop.hbase.ipc.TransactionalRegionInterface' 
   and
  'hbase.regionserver.impl' to 'org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer'
- 
-
+and
+ 'hbase.hlog.splitter.impl' to 'org.apache.hadoop.hbase.regionserver.transactional.THLogSplitter'
  
  For more details, looks at the package.html in the appropriate client package of the source. 
