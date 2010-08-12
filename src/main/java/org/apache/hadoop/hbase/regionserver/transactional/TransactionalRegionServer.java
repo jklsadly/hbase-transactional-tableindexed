@@ -63,7 +63,7 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
         super(conf);
         cleanOldTransactionsThread = new CleanOldTransactionsChore(this, super.stopRequested);
         transactionLeases = new Leases(conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME), LEASE_CHECK_FREQUENCY);
-        LOG.error("leases time:" + conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME));
+        LOG.info("Transaction lease time: " + conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME));
     }
 
     protected THLog getTransactionLog() {

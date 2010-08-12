@@ -118,7 +118,6 @@ public class TransactionalRegion extends HRegion {
             throws UnsupportedEncodingException, IOException {
         long maxSeqId = super.replayRecoveredEditsIfAny(regiondir, minSeqId, reporter);
 
-        // logfile name = Path oldLogFile = new Path(regiondir, HConstants.HREGION_OLDLOGFILE_NAME);
         Path recoveredEdits = new Path(regiondir, HLogSplitter.RECOVERED_EDITS);
 
         doReconstructionLog(recoveredEdits, minSeqId, maxSeqId, reporter);
@@ -126,10 +125,8 @@ public class TransactionalRegion extends HRegion {
         return maxSeqId;
     }
 
-    // @Override
     protected void doReconstructionLog(final Path oldCoreLogFile, final long minSeqId, final long maxSeqId,
             final Progressable reporter) throws UnsupportedEncodingException, IOException {
-        // super.doReconstructionLog(oldCoreLogFile, minSeqId, maxSeqId, reporter);
 
         Path trxPath = new Path(oldCoreLogFile.getParent(), THLog.HREGION_OLD_THLOGFILE_NAME);
 
