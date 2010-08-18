@@ -601,9 +601,9 @@ public class TransactionalRegion extends HRegion {
                 debugMessage.append("Removed [").append(numRemoved).append("] commited transactions");
 
                 if (minStartSeqNumber == Integer.MAX_VALUE) {
-                    debugMessage.append("with any sequence number");
+                    debugMessage.append(" with any sequence number.");
                 } else {
-                    debugMessage.append("with sequence lower than [").append(minStartSeqNumber).append("].");
+                    debugMessage.append(" with sequence lower than [").append(minStartSeqNumber).append("].");
                 }
                 if (!commitedTransactionsBySequenceNumber.isEmpty()) {
                     debugMessage.append(" Still have [").append(commitedTransactionsBySequenceNumber.size()).append(
