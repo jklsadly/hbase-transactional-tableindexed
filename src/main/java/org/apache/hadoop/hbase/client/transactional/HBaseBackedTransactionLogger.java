@@ -46,7 +46,7 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
     public static void createTable() throws IOException {
         HTableDescriptor tableDesc = new HTableDescriptor(TABLE_NAME);
         tableDesc.addFamily(new HColumnDescriptor(INFO_FAMILY));
-        HBaseAdmin admin = new HBaseAdmin(new HBaseConfiguration());
+        HBaseAdmin admin = new HBaseAdmin(HBaseConfiguration.create());
         admin.createTable(tableDesc);
     }
 
