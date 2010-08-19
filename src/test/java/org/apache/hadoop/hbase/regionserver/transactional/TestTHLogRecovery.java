@@ -20,8 +20,10 @@ import junit.framework.Assert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -44,6 +46,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestTHLogRecovery {
@@ -70,17 +73,16 @@ public class TestTHLogRecovery {
         Configuration conf = TEST_UTIL.getConfiguration();
         HBaseTrxTestUtil.configureForIndexingAndTransactions(conf);
 
+        // TEST_UTIL.getTestFileSystem().delete(new Path(conf.get(HConstants.HBASE_DIR)), true);
+
         // Set flush params so we don't get any
         // FIXME (defaults are probably fine)
 
         TEST_UTIL.startMiniCluster(3);
 
-        // TEST_UTIL.getTestFileSystem().delete(new Path(conf.get(HConstants.HBASE_DIR)),
-        // true);
 
         HTableDescriptor desc = new HTableDescriptor(TABLE_NAME);
         desc.addFamily(new HColumnDescriptor(FAMILY));
-        // HBaseAdmin admin = new HBaseAdmin(conf);
         HBaseAdmin admin = TEST_UTIL.getHBaseAdmin();
 
         admin.createTable(desc);
@@ -109,6 +111,8 @@ public class TestTHLogRecovery {
         table.put(new Put(ROW1).add(FAMILY, QUAL_A, Bytes.toBytes(TOTAL_VALUE)));
         table.put(new Put(ROW2).add(FAMILY, QUAL_A, Bytes.toBytes(0)));
         table.put(new Put(ROW3).add(FAMILY, QUAL_A, Bytes.toBytes(0)));
+
+        flushRegionServer();
     }
 
     @Test
@@ -137,6 +141,29 @@ public class TestTHLogRecovery {
         t.start();
         threadDumpingJoin(t);
         verifyWrites(8, 1, 1);
+    }
+
+    @Test
+    public void testWithFlushAbort() throws IOException, CommitUnsuccessfulException {
+        TransactionState state1 = makeTransaction(true);
+        flushRegionServer();
+        abortRegionServer();
+
+        Thread t = startVerificationThread(0);
+        t.start();
+        threadDumpingJoin(t);
+        verifyWrites(TOTAL_VALUE, 0, 0);
+    }
+
+    @Test
+    public void testNoFlushAbort() throws IOException {
+        TransactionState state1 = makeTransaction(false);
+        abortRegionServer();
+
+        Thread t = startVerificationThread(0);
+        t.start();
+        threadDumpingJoin(t);
+        verifyWrites(TOTAL_VALUE, 0, 0);
     }
 
 
