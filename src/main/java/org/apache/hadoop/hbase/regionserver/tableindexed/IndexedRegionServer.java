@@ -40,16 +40,15 @@ public class IndexedRegionServer extends TransactionalRegionServer implements In
     }
 
     @Override
-    protected HRegion instantiateRegion(final HRegionInfo regionInfo, final HLog hlog) throws IOException {
-        HRegion r = new IndexedRegion(HTableDescriptor.getTableDir(super.getRootDir(), regionInfo.getTableDesc()
-                .getName()), super.hlog, super.getTransactionLog(), super.getFileSystem(), super.conf, regionInfo, super
-                .getFlushRequester(), super.getTransactionalLeases());
-        r.initialize(new Progressable() {
-
-            public void progress() {
-                addProcessingMessage(regionInfo);
-            }
-        });
+    protected HRegion instantiateRegion(final HRegionInfo regionInfo) {
+        HRegion r;
+        try {
+            r = new IndexedRegion(HTableDescriptor.getTableDir(super.getRootDir(), regionInfo.getTableDesc().getName()),
+                    super.hlog, super.getTransactionLog(), super.getFileSystem(), super.conf, regionInfo,
+                    super.getFlushRequester(), super.getTransactionalLeases());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         return r;
     }
 

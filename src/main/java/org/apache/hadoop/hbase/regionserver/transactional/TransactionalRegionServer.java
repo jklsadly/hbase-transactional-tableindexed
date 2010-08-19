@@ -104,17 +104,18 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
     }
 
     @Override
-    protected HRegion instantiateRegion(final HRegionInfo regionInfo, final HLog log) throws IOException {
+    protected HRegion instantiateRegion(final HRegionInfo regionInfo) {
         HRegion r = new TransactionalRegion(HTableDescriptor.getTableDir(super.getRootDir(), regionInfo.getTableDesc()
                 .getName()), super.hlog, this.trxHLog, super.getFileSystem(), super.conf, regionInfo, super
                 .getFlushRequester(), this.getTransactionalLeases());
-        r.initialize(new Progressable() {
-
-            public void progress() {
-                addProcessingMessage(regionInfo);
-            }
-        });
         return r;
+    }
+
+    @Override
+    protected long initializeRegion(final HRegion region) throws IOException {
+        long maxSeqId = super.initializeRegion(region);
+        if (trxHLog != null) trxHLog.setSequenceNumber(maxSeqId);
+        return maxSeqId;
     }
 
     protected TransactionalRegion getTransactionalRegion(final byte[] regionName) throws NotServingRegionException {
