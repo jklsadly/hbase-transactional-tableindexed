@@ -19,4 +19,6 @@ Configuration:
 and
  'hbase.hlog.splitter.impl' to 'org.apache.hadoop.hbase.regionserver.transactional.THLogSplitter'
  
+ Currently you have to manually create the GLOBAL_TRX_LOG table with HBaseBackedTransactionLogger.createTable() before you start using any transactions.
+ 
  For more details, looks at the package.html in the appropriate client package of the source. 
