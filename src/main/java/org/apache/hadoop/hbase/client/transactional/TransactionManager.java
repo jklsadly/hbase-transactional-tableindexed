@@ -17,6 +17,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.NotServingRegionException;
+import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
@@ -34,16 +35,19 @@ public class TransactionManager {
 
     /**
      * @param conf
+     * @throws ZooKeeperConnectionException
      */
-    public TransactionManager(final Configuration conf) {
+    public TransactionManager(final Configuration conf) throws ZooKeeperConnectionException {
         this(LocalTransactionLogger.getInstance(), conf);
     }
 
     /**
      * @param transactionLogger
      * @param conf
+     * @throws ZooKeeperConnectionException
      */
-    public TransactionManager(final TransactionLogger transactionLogger, final Configuration conf) {
+    public TransactionManager(final TransactionLogger transactionLogger, final Configuration conf)
+            throws ZooKeeperConnectionException {
         this.transactionLogger = transactionLogger;
         connection = HConnectionManager.getConnection(conf);
     }

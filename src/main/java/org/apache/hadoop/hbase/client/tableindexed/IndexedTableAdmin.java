@@ -11,21 +11,21 @@
 package org.apache.hadoop.hbase.client.tableindexed;
 
 import java.io.IOException;
+import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.Map.Entry;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ColumnNameParseException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.MasterNotRunningException;
+import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
@@ -46,8 +46,9 @@ public class IndexedTableAdmin extends HBaseAdmin {
      * 
      * @param conf Configuration object
      * @throws MasterNotRunningException
+     * @throws ZooKeeperConnectionException
      */
-    public IndexedTableAdmin(final Configuration conf) throws MasterNotRunningException {
+    public IndexedTableAdmin(final Configuration conf) throws MasterNotRunningException, ZooKeeperConnectionException {
         super(conf);
     }
 
@@ -70,8 +71,7 @@ public class IndexedTableAdmin extends HBaseAdmin {
         }
     }
 
-    private HTableDescriptor createIndexTableDesc(final byte[] baseTableName, final IndexSpecification indexSpec)
-            throws ColumnNameParseException {
+    private HTableDescriptor createIndexTableDesc(final byte[] baseTableName, final IndexSpecification indexSpec) {
         HTableDescriptor indexTableDesc = new HTableDescriptor(indexSpec.getIndexedTableName(baseTableName));
         Set<byte[]> families = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
         families.add(IndexedTable.INDEX_COL_FAMILY);

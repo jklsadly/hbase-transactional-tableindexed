@@ -43,7 +43,7 @@ public interface TransactionalRegionInterface extends HRegionInterface {
   int COMMIT_OK_READ_ONLY = 2;
   /** Status code representing a transaction that cannot be committed. */
   int COMMIT_UNSUCESSFUL = 3;
-  
+
   /**
    * Sent to initiate a transaction.
    * 
@@ -56,45 +56,48 @@ public interface TransactionalRegionInterface extends HRegionInterface {
 
   /**
    * Perform a transactional Get operation.
+   * 
    * @param regionName name of region to get from
    * @param get Get operation
    * @return Result
    * @throws IOException
    */
-  public Result get(long transactionId, byte [] regionName, Get get) throws IOException;
+  public Result get(long transactionId, byte[] regionName, Get get)
+      throws IOException;
 
- 
   /**
-   * Transactional put data into the specified region 
+   * Transactional put data into the specified region
+   * 
    * @param regionName
    * @param put the data to be put
    * @throws IOException
    */
-  public void put(long transactionId, final byte [] regionName, final Put put)
-  throws IOException;
-  
+  public void put(long transactionId, final byte[] regionName, final Put put)
+      throws IOException;
+
   /**
    * Put an array of puts into the specified region
+   * 
    * @param regionName
    * @param puts
    * @return result
    * @throws IOException
    */
-  public int put(long transactionId, final byte[] regionName, final Put [] puts)
-  throws IOException;
-  
-  
+  public int put(long transactionId, final byte[] regionName, final Put[] puts)
+      throws IOException;
+
   /**
-   * Deletes all the KeyValues that match those found in the Delete object, 
-   * if their ts <= to the Delete. In case of a delete with a specific ts it
-   * only deletes that specific KeyValue.
+   * Deletes all the KeyValues that match those found in the Delete object, if
+   * their ts <= to the Delete. In case of a delete with a specific ts it only
+   * deletes that specific KeyValue.
+   * 
    * @param regionName
    * @param delete
    * @throws IOException
    */
-  public void delete(long transactionId, final byte[] regionName, final Delete delete)
-  throws IOException;
-   
+  public void delete(long transactionId, final byte[] regionName,
+      final Delete delete) throws IOException;
+
   //
   // remote scanner interface
   //
@@ -107,10 +110,10 @@ public interface TransactionalRegionInterface extends HRegionInterface {
    * @return scannerId scanner identifier used in other calls
    * @throws IOException
    */
-  public long openScanner(long transactionId, final byte [] regionName, final Scan scan)
-  throws IOException;
-  
-   /**
+  public long openScanner(long transactionId, final byte[] regionName,
+      final Scan scan) throws IOException;
+
+  /**
    * Ask if we can commit the given transaction.
    * 
    * @param regionName
@@ -149,5 +152,6 @@ public interface TransactionalRegionInterface extends HRegionInterface {
    * @param transactionId
    * @throws IOException
    */
-  void abortTransaction(final byte[] regionName, long transactionId) throws IOException;
+  void abortTransaction(final byte[] regionName, long transactionId)
+      throws IOException;
 }

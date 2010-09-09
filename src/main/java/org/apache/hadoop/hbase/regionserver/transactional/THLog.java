@@ -22,10 +22,10 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.LogRollListener;
 import org.apache.hadoop.hbase.regionserver.wal.SequenceFileLogReader;
 import org.apache.hadoop.hbase.regionserver.wal.SequenceFileLogWriter;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.regionserver.wal.WALObserver;
 
 /**
  * Add support for transactional operations to the regionserver's write-ahead-log.
@@ -38,8 +38,8 @@ public class THLog extends HLog {
     static final String HREGION_OLD_THLOGFILE_NAME = "oldthlogfile.log";
 
     public THLog(final FileSystem fs, final Path dir, final Path oldLogDir, final Configuration conf,
-            final LogRollListener listener) throws IOException {
-        super(fs, dir, oldLogDir, conf, listener, null, false, null);
+            final List<WALObserver> listeners) throws IOException {
+        super(fs, dir, oldLogDir, conf, listeners, false, null);
     }
 
     /**

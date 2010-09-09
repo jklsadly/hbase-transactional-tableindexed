@@ -14,16 +14,16 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Collection;
 import java.util.List;
+import java.util.NavigableSet;
 
 import junit.framework.Assert;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -46,7 +46,6 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestTHLogRecovery {
@@ -191,11 +190,11 @@ public class TestTHLogRecovery {
         int server = -1;
         for (int i = 0; i < regionThreads.size() && server == -1; i++) {
             HRegionServer s = regionThreads.get(i).getRegionServer();
-            Collection<HRegion> regions = s.getOnlineRegions();
-            for (HRegion r : regions) {
+            NavigableSet<HRegionInfo> regions = s.getOnlineRegions();
+            for (HRegionInfo r : regions) {
                 if (Bytes.equals(r.getTableDesc().getName(), Bytes.toBytes(TABLE_NAME))) {
                     server = i;
-                    region = r;
+                    region = s.getOnlineRegion(r.getTableDesc().getName());
                 }
             }
         }
@@ -203,7 +202,8 @@ public class TestTHLogRecovery {
             LOG.fatal("could not find region server serving table region");
             Assert.fail();
         }
-        ((TransactionalRegionServer) regionThreads.get(server).getRegionServer()).getFlushRequester().request(region);
+        ((TransactionalRegionServer) regionThreads.get(server).getRegionServer()).getFlushRequester().requestFlush(
+            region);
     }
 
     /**
@@ -215,10 +215,10 @@ public class TestTHLogRecovery {
         int server = -1;
         for (int i = 0; i < regionThreads.size(); i++) {
             HRegionServer s = regionThreads.get(i).getRegionServer();
-            Collection<HRegion> regions = s.getOnlineRegions();
+            NavigableSet<HRegionInfo> regions = s.getOnlineRegions();
             LOG.info("server: " + regionThreads.get(i).getName());
-            for (HRegion r : regions) {
-                LOG.info("region: " + r.getRegionInfo().getRegionNameAsString());
+            for (HRegionInfo r : regions) {
+                LOG.info("region: " + r.getRegionNameAsString());
                 if (Bytes.equals(r.getTableDesc().getName(), Bytes.toBytes(TABLE_NAME))) {
                     server = i;
                 }

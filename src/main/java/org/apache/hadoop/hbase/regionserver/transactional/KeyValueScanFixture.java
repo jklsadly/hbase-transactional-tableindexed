@@ -11,6 +11,7 @@
 
 package org.apache.hadoop.hbase.regionserver.transactional;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -77,8 +78,14 @@ public class KeyValueScanFixture implements KeyValueScanner {
         return true;
     }
 
+
+    @Override
+    public boolean reseek(KeyValue key) {
+        return seek(key);
+    }
+
     @Override
     public void close() {
-    // noop.
+        // noop.
     }
 }
