@@ -161,6 +161,7 @@ public class TransactionalTable extends HTable {
 
         @Override
         protected ScannerCallable getScannerCallable(final byte[] localStartKey, final int caching) {
+            getScan().setStartRow(localStartKey);
             TransactionScannerCallable t = new TransactionScannerCallable(transactionState, getConnection(),
                     getTableName(), getScan());
             t.setCaching(caching);

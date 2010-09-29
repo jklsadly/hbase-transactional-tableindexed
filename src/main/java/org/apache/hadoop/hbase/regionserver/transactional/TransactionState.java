@@ -15,13 +15,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,14 +27,13 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.ScanQueryMatcher;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 
 /**
  * Holds the state of a transaction. This includes a buffer of all writes, a record of all reads / scans, and
@@ -75,7 +72,7 @@ class TransactionState {
 
         /**
          * Check if this scan range contains the given key.
-         *
+         * 
          * @param rowKey
          * @return boolean
          */
@@ -100,10 +97,9 @@ class TransactionState {
     private final long hLogStartSequenceId;
     private final long transactionId;
     private Status status;
-    private SortedSet<byte[]> readSet = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
-    private List<Put> puts = new LinkedList<Put>();
     private List<ScanRange> scans = new LinkedList<ScanRange>();
     private List<Delete> deletes = new LinkedList<Delete>();
+    private List<WriteAction> writeOrdering = new LinkedList<WriteAction>();
     private Set<TransactionState> transactionsToCheck = new HashSet<TransactionState>();
     private int startSequenceNumber;
     private Integer sequenceNumber;
@@ -117,91 +113,91 @@ class TransactionState {
     }
 
     void addRead(final byte[] rowKey) {
-        readSet.add(rowKey);
-    }
-
-    Set<byte[]> getReadSet() {
-        return readSet;
+        scans.add(new ScanRange(rowKey, rowKey));
     }
 
     void addWrite(final Put write) {
-        updateLatestTimestamp(write.getFamilyMap().values());
-        puts.add(write);
+        updateLatestTimestamp(write.getFamilyMap().values(), EnvironmentEdgeManager.currentTimeMillis());
+        writeOrdering.add(new WriteAction(write));
     }
 
     // FIXME REVIEW not sure about this. Needed for log recovery? but broke other tests.
-    private void updateLatestTimestamp(final Collection<List<KeyValue>> kvsCollection) {
-        byte[] now = Bytes.toBytes(System.currentTimeMillis());
+    static void updateLatestTimestamp(final Collection<List<KeyValue>> kvsCollection, final long time) {
+        byte[] timeBytes = Bytes.toBytes(time);
         // HAVE to manually set the KV timestamps
         for (List<KeyValue> kvs : kvsCollection) {
             for (KeyValue kv : kvs) {
                 if (kv.isLatestTimestamp()) {
-                    kv.updateLatestStamp(now);
+                    kv.updateLatestStamp(timeBytes);
                 }
             }
         }
     }
 
     boolean hasWrite() {
-        return puts.size() > 0 || deletes.size() > 0;
-    }
-
-    List<Put> getPuts() {
-        return puts;
+        return writeOrdering.size() > 0;
     }
 
     void addDelete(final Delete delete) {
-        // updateLatestTimestamp(delete.getFamilyMap().values());
+        long now = EnvironmentEdgeManager.currentTimeMillis();
+        updateLatestTimestamp(delete.getFamilyMap().values(), now);
+        if (delete.getTimeStamp() == HConstants.LATEST_TIMESTAMP) {
+            delete.setTimestamp(now);
+        }
+
         deletes.add(delete);
+        writeOrdering.add(new WriteAction(delete));
     }
 
-    /**
-     * GetFull from the writeSet.
-     *
-     * @param row
-     * @param columns
-     * @param timestamp
-     * @return
-     */
-    Result localGet(final Get get) {
-
-        // TODO take deletes into account as well
-
-        List<KeyValue> localKVs = new ArrayList<KeyValue>();
-        List<Put> reversedPuts = new ArrayList<Put>(puts);
-        Collections.reverse(reversedPuts);
-        for (Put put : reversedPuts) {
-            if (!Bytes.equals(get.getRow(), put.getRow())) {
-                continue;
+    void applyDeletes(final List<KeyValue> input, final long minTime, final long maxTime) {
+        if (deletes.isEmpty()) {
+            return;
+        }
+        for (Iterator<KeyValue> itr = input.iterator(); itr.hasNext();) {
+            KeyValue included = applyDeletes(itr.next(), minTime, maxTime);
+            if (null == included) {
+                itr.remove();
             }
-            if (put.getTimeStamp() > get.getTimeRange().getMax()) {
-                continue;
-            }
-            if (put.getTimeStamp() < get.getTimeRange().getMin()) {
+        }
+    }
+
+    KeyValue applyDeletes(final KeyValue kv, final long minTime, final long maxTime) {
+        if (deletes.isEmpty()) {
+            return kv;
+        }
+
+        for (Delete delete : deletes) {
+            // Skip if delete should not apply
+            if (!Bytes.equals(kv.getRow(), delete.getRow()) || kv.getTimestamp() > delete.getTimeStamp()
+                    || delete.getTimeStamp() > maxTime || delete.getTimeStamp() < minTime) {
                 continue;
             }
 
-            for (Entry<byte[], NavigableSet<byte[]>> getFamilyEntry : get.getFamilyMap().entrySet()) {
-                List<KeyValue> familyPuts = put.getFamilyMap().get(getFamilyEntry.getKey());
-                if (familyPuts == null) {
+            // Whole-row delete
+            if (delete.isEmpty()) {
+                return null;
+            }
+
+            for (Entry<byte[], List<KeyValue>> deleteEntry : delete.getFamilyMap().entrySet()) {
+                byte[] family = deleteEntry.getKey();
+                if (!Bytes.equals(kv.getFamily(), family)) {
                     continue;
                 }
-                if (getFamilyEntry.getValue() == null) {
-                    localKVs.addAll(familyPuts);
-                } else {
-                    for (KeyValue kv : familyPuts) {
-                        if (getFamilyEntry.getValue().contains(kv.getQualifier())) {
-                            localKVs.add(kv);
-                        }
+                List<KeyValue> familyDeletes = deleteEntry.getValue();
+                if (familyDeletes == null) {
+                    return null;
+                }
+                for (KeyValue keyDeletes : familyDeletes) {
+                    byte[] deleteQualifier = keyDeletes.getQualifier();
+                    byte[] kvQualifier = kv.getQualifier();
+                    if (keyDeletes.getTimestamp() > kv.getTimestamp() && Bytes.equals(deleteQualifier, kvQualifier)) {
+                        return null;
                     }
                 }
             }
         }
 
-        if (localKVs.isEmpty()) {
-            return null;
-        }
-        return new Result(localKVs);
+        return kv;
     }
 
     void addTransactionToCheck(final TransactionState transaction) {
@@ -222,19 +218,13 @@ class TransactionState {
             return false; // Cannot conflict with aborted transactions
         }
 
-        for (Put otherUpdate : checkAgainst.getPuts()) {
-            if (this.getReadSet().contains(otherUpdate.getRow())) {
-                LOG.debug("Transaction [" + this.toString() + "] has read which conflicts with ["
-                        + checkAgainst.toString() + "]: region [" + regionInfo.getRegionNameAsString() + "], row["
-                        + Bytes.toString(otherUpdate.getRow()) + "]");
-                return true;
-            }
+        for (WriteAction otherUpdate : checkAgainst.writeOrdering) {
+            byte[] row = otherUpdate.getRow();
             for (ScanRange scanRange : this.scans) {
-                if (scanRange.contains(otherUpdate.getRow())) {
+                if (scanRange.contains(row)) {
                     LOG.debug("Transaction [" + this.toString() + "] has scan which conflicts with ["
                             + checkAgainst.toString() + "]: region [" + regionInfo.getRegionNameAsString()
-                            + "], scanRange[" + scanRange.toString() + "] ,row[" + Bytes.toString(otherUpdate.getRow())
-                            + "]");
+                            + "], scanRange[" + scanRange.toString() + "] ,row[" + Bytes.toString(row) + "]");
                     return true;
                 }
             }
@@ -244,7 +234,7 @@ class TransactionState {
 
     /**
      * Get the status.
-     *
+     * 
      * @return Return the status.
      */
     Status getStatus() {
@@ -253,7 +243,7 @@ class TransactionState {
 
     /**
      * Set the status.
-     *
+     * 
      * @param status The status to set.
      */
     void setStatus(final Status status) {
@@ -262,7 +252,7 @@ class TransactionState {
 
     /**
      * Get the startSequenceNumber.
-     *
+     * 
      * @return Return the startSequenceNumber.
      */
     int getStartSequenceNumber() {
@@ -271,7 +261,7 @@ class TransactionState {
 
     /**
      * Set the startSequenceNumber.
-     *
+     * 
      * @param startSequenceNumber
      */
     void setStartSequenceNumber(final int startSequenceNumber) {
@@ -280,7 +270,7 @@ class TransactionState {
 
     /**
      * Get the sequenceNumber.
-     *
+     * 
      * @return Return the sequenceNumber.
      */
     Integer getSequenceNumber() {
@@ -289,7 +279,7 @@ class TransactionState {
 
     /**
      * Set the sequenceNumber.
-     *
+     * 
      * @param sequenceNumber The sequenceNumber to set.
      */
     void setSequenceNumber(final Integer sequenceNumber) {
@@ -303,12 +293,10 @@ class TransactionState {
         result.append(transactionId);
         result.append(" status: ");
         result.append(status.name());
-        result.append(" read Size: ");
-        result.append(readSet.size());
         result.append(" scan Size: ");
         result.append(scans.size());
         result.append(" write Size: ");
-        result.append(puts.size());
+        result.append(getWriteOrdering().size());
         result.append(" startSQ: ");
         result.append(startSequenceNumber);
         if (sequenceNumber != null) {
@@ -322,7 +310,7 @@ class TransactionState {
 
     /**
      * Get the transactionId.
-     *
+     * 
      * @return Return the transactionId.
      */
     long getTransactionId() {
@@ -331,7 +319,7 @@ class TransactionState {
 
     /**
      * Get the startSequenceId.
-     *
+     * 
      * @return Return the startSequenceId.
      */
     long getHLogStartSequenceId() {
@@ -355,67 +343,95 @@ class TransactionState {
     }
 
     /**
-     * Get deleteSet.
-     *
-     * @return deleteSet
+     * Get deletes.
+     * 
+     * @return deletes
      */
-    List<Delete> getDeleteSet() {
+    List<Delete> getDeletes() {
         return deletes;
     }
 
     /**
-     * Get a scanner to go through the puts from this transaction. Used to weave together the local trx puts with the
-     * global state.
-     *
+     * Get a scanner to go through the puts and deletes from this transaction. Used to weave together the local trx puts
+     * with the global state.
+     * 
      * @return scanner
      */
     KeyValueScanner getScanner(final Scan scan) {
-        return new PutScanner(scan);
+        return new TransactionScanner(scan);
     }
 
-    private KeyValue[] getPutKVs(final Scan scan) {
+    private KeyValue[] getAllKVs(final Scan scan) {
         List<KeyValue> kvList = new ArrayList<KeyValue>();
 
-        for (Put put : puts) {
+        for (WriteAction action : writeOrdering) {
+            byte[] row = action.getRow();
+            List<KeyValue> kvs = action.getKeyValues();
+
             if (scan.getStartRow() != null && !Bytes.equals(scan.getStartRow(), HConstants.EMPTY_START_ROW)
-                    && Bytes.compareTo(put.getRow(), scan.getStartRow()) < 0) {
+                    && Bytes.compareTo(row, scan.getStartRow()) < 0) {
                 continue;
             }
             if (scan.getStopRow() != null && !Bytes.equals(scan.getStopRow(), HConstants.EMPTY_END_ROW)
-                    && Bytes.compareTo(put.getRow(), scan.getStopRow()) >= 0) {
+                    && Bytes.compareTo(row, scan.getStopRow()) > 0) {
                 continue;
             }
 
-            for (List<KeyValue> putKVs : put.getFamilyMap().values()) {
-                kvList.addAll(putKVs);
-            }
+            kvList.addAll(kvs);
         }
-        return kvList.toArray(new KeyValue[0]);
+
+        return kvList.toArray(new KeyValue[kvList.size()]);
     }
 
-    private int getPutNumber(final KeyValue kv) {
-        for (int i = 0; i < puts.size(); i++) {
-            for (List<KeyValue> putKVs : puts.get(i).getFamilyMap().values()) {
+    private int getTransactionSequenceIndex(final KeyValue kv) {
+        for (int i = 0; i < writeOrdering.size(); i++) {
+            WriteAction action = writeOrdering.get(i);
+            if (isKvInPut(kv, action.getPut())) {
+                return i;
+            }
+            if (isKvInDelete(kv, action.getDelete())) {
+                return i;
+            }
+        }
+        throw new IllegalStateException("Can not find kv in transaction writes");
+    }
+
+    private boolean isKvInPut(final KeyValue kv, final Put put) {
+        if (null != put) {
+            for (List<KeyValue> putKVs : put.getFamilyMap().values()) {
                 for (KeyValue putKV : putKVs) {
                     if (putKV == kv) {
-                        return i;
+                        return true;
                     }
                 }
             }
         }
-        throw new IllegalStateException("Can not fine put KV in puts");
+        return false;
+    }
+
+    private boolean isKvInDelete(final KeyValue kv, final Delete delete) {
+        if (null != delete) {
+            for (List<KeyValue> putKVs : delete.getFamilyMap().values()) {
+                for (KeyValue deleteKv : putKVs) {
+                    if (deleteKv == kv) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**
-     * Scanner of the puts that occur during this transaction.
-     *
+     * Scanner of the puts and deletes that occur during this transaction.
+     * 
      * @author clint.morgan
      */
-    private class PutScanner extends KeyValueScanFixture implements InternalScanner {
+    private class TransactionScanner extends KeyValueListScanner implements InternalScanner {
 
         private ScanQueryMatcher matcher;
 
-        PutScanner(final Scan scan) {
+        TransactionScanner(final Scan scan) {
             super(new KeyValue.KVComparator() {
 
                 @Override
@@ -427,25 +443,28 @@ class TransactionState {
                     if (left == right) {
                         return 0;
                     }
-                    int put1Number = getPutNumber(left);
-                    int put2Number = getPutNumber(right);
+                    int put1Number = getTransactionSequenceIndex(left);
+                    int put2Number = getTransactionSequenceIndex(right);
                     return put2Number - put1Number;
                 }
-            }, getPutKVs(scan));
+            }, getAllKVs(scan));
 
-            matcher = new ScanQueryMatcher(scan, null, null, HConstants.FOREVER, KeyValue.KEY_COMPARATOR, scan
-                    .getMaxVersions());
+            // We want transaction scanner to always take priority over store scanners.
+            setSequenceID(Long.MAX_VALUE);
+
+            matcher = new ScanQueryMatcher(scan, null, null, HConstants.FOREVER, KeyValue.KEY_COMPARATOR,
+                    scan.getMaxVersions());
         }
 
         /**
-         * Get the next row of values from this Store.
-         *
+         * Get the next row of values from this transaction.
+         * 
          * @param outResult
          * @param limit
          * @return true if there are more rows, false if scanner is done
          */
+        @Override
         public synchronized boolean next(final List<KeyValue> outResult, final int limit) throws IOException {
-            // DebugPrint.println("SS.next");
             KeyValue peeked = this.peek();
             if (peeked == null) {
                 close();
@@ -456,7 +475,6 @@ class TransactionState {
             List<KeyValue> results = new ArrayList<KeyValue>();
             LOOP: while ((kv = this.peek()) != null) {
                 ScanQueryMatcher.MatchCode qcode = matcher.match(kv);
-                // DebugPrint.println("SS peek kv = " + kv + " with qcode = " + qcode);
                 switch (qcode) {
                     case INCLUDE:
                         KeyValue next = this.next();
@@ -484,9 +502,6 @@ class TransactionState {
                         break;
 
                     case SEEK_NEXT_COL:
-                        // TODO hfile needs 'hinted' seeking to prevent it from
-                        // reseeking from the start of the block on every dang seek.
-                        // We need that API and expose it the scanner chain.
                         this.next();
                         break;
 
@@ -510,9 +525,87 @@ class TransactionState {
             return false;
         }
 
+        @Override
         public boolean next(final List<KeyValue> results) throws IOException {
             return next(results, -1);
         }
 
+    }
+
+    /** Simple wrapper for Put and Delete since they don't have a common enough interface. */
+    class WriteAction {
+
+        private Put put;
+        private Delete delete;
+
+        public WriteAction(final Put put) {
+            if (null == put) {
+                throw new IllegalArgumentException("WriteAction requires a Put or a Delete.");
+            }
+            this.put = put;
+        }
+
+        public WriteAction(final Delete delete) {
+            if (null == delete) {
+                throw new IllegalArgumentException("WriteAction requires a Put or a Delete.");
+            }
+            this.delete = delete;
+        }
+
+        public Put getPut() {
+            return put;
+        }
+
+        public Delete getDelete() {
+            return delete;
+        }
+
+        public byte[] getRow() {
+            if (put != null) {
+                return put.getRow();
+            } else if (delete != null) {
+                return delete.getRow();
+            }
+            throw new IllegalStateException("WriteAction is invalid");
+        }
+
+        List<KeyValue> getKeyValues() {
+            List<KeyValue> edits = new ArrayList<KeyValue>();
+            Collection<List<KeyValue>> kvsList;
+
+            if (put != null) {
+                kvsList = put.getFamilyMap().values();
+            } else if (delete != null) {
+                if (delete.getFamilyMap().isEmpty()) {
+                    // If whole-row delete then we need to expand for each family
+                    kvsList = new ArrayList<List<KeyValue>>(1);
+                    for (byte[] family : regionInfo.getTableDesc().getFamiliesKeys()) {
+                        KeyValue familyDelete = new KeyValue(delete.getRow(), family, null, delete.getTimeStamp(),
+                                KeyValue.Type.DeleteFamily);
+                        kvsList.add(Collections.singletonList(familyDelete));
+                    }
+                } else {
+                    kvsList = delete.getFamilyMap().values();
+                }
+            } else {
+                throw new IllegalStateException("WriteAction is invalid");
+            }
+
+            for (List<KeyValue> kvs : kvsList) {
+                for (KeyValue kv : kvs) {
+                    edits.add(kv);
+                }
+            }
+            return edits;
+        }
+    }
+
+    /**
+     * Get the puts and deletes in transaction order.
+     * 
+     * @return Return the writeOrdering.
+     */
+    List<WriteAction> getWriteOrdering() {
+        return writeOrdering;
     }
 }

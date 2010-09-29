@@ -12,18 +12,16 @@ package org.apache.hadoop.hbase.regionserver.transactional;
 
 import java.io.IOException;
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.RemoteExceptionHandler;
 import org.apache.hadoop.hbase.catalog.CatalogTracker;
-import org.apache.hadoop.hbase.catalog.MetaEditor;
-import org.apache.hadoop.hbase.catalog.RootLocationEditor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
@@ -36,297 +34,287 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Leases;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
+import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
+import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.regionserver.wal.WALObserver;
 import org.apache.hadoop.hbase.util.Threads;
-import org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException;
 import org.apache.hadoop.io.MapWritable;
 import org.apache.zookeeper.KeeperException;
 
 /**
- * RegionServer with support for transactions. Transactional logic is at the
- * region level, so we mostly just delegate to the appropriate
- * TransactionalRegion.
+ * RegionServer with support for transactions. Transactional logic is at the region level, so we mostly just delegate to
+ * the appropriate TransactionalRegion.
  */
-public class TransactionalRegionServer extends HRegionServer implements
-    TransactionalRegionInterface {
+public class TransactionalRegionServer extends HRegionServer implements TransactionalRegionInterface {
 
-  private static final String LEASE_TIME = "hbase.transaction.leasetime";
-  private static final int DEFAULT_LEASE_TIME = 60 * 1000;
-  private static final int LEASE_CHECK_FREQUENCY = 1000;
+    private static final String LEASE_TIME = "hbase.transaction.leasetime";
+    private static final int DEFAULT_LEASE_TIME = 60 * 1000;
+    private static final int LEASE_CHECK_FREQUENCY = 1000;
 
-  static final Log LOG = LogFactory.getLog(TransactionalRegionServer.class);
-  private final Leases transactionLeases;
-  private final CleanOldTransactionsChore cleanOldTransactionsThread;
+    static final Log LOG = LogFactory.getLog(TransactionalRegionServer.class);
+    private final Leases transactionLeases;
+    private final CleanOldTransactionsChore cleanOldTransactionsThread;
 
-  private THLog trxHLog;
+    private THLog trxHLog;
 
-  /**
-   * @param conf
-   * @throws IOException
-   */
-  public TransactionalRegionServer(final Configuration conf)
-      throws IOException, InterruptedException {
-    super(conf);
-    cleanOldTransactionsThread = new CleanOldTransactionsChore(this);
-    transactionLeases = new Leases(conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME),
-        LEASE_CHECK_FREQUENCY);
-    LOG.info("Transaction lease time: "
-        + conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME));
-  }
-
-  protected THLog getTransactionLog() {
-    return trxHLog;
-  }
-
-  @Override
-  public long getProtocolVersion(final String protocol, final long clientVersion)
-      throws IOException {
-    if (protocol.equals(TransactionalRegionInterface.class.getName())) {
-      return HBaseRPCProtocolVersion.versionID;
-    }
-    return super.getProtocolVersion(protocol, clientVersion);
-  }
-
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  protected void handleReportForDutyResponse(final MapWritable c)
-      throws IOException {
-    super.handleReportForDutyResponse(c);
-    initializeTHLog();
-    String n = Thread.currentThread().getName();
-    UncaughtExceptionHandler handler = new UncaughtExceptionHandler() {
-
-      public void uncaughtException(final Thread t, final Throwable e) {
-        abort("Set stop flag in " + t.getName(), e);
-        LOG.fatal("Set stop flag in " + t.getName(), e);
-      }
-    };
-    Threads.setDaemonThreadRunning(this.cleanOldTransactionsThread, n
-        + ".oldTransactionCleaner", handler);
-    Threads.setDaemonThreadRunning(this.transactionLeases,
-        "Transactional leases");
-  }
-
-  private void initializeTHLog() throws IOException {
-    // We keep in the same directory as the core HLog.
-    Path oldLogDir = new Path(getRootDir(), HLogSplitter.RECOVERED_EDITS);
-    Path logdir = new Path(getRootDir(),
-        HLog.getHLogDirectoryName(this.serverInfo));
-
-    trxHLog = new THLog(getFileSystem(), logdir, oldLogDir, conf, null);
-  }
-
-  @Override
-  public void postOpenDeployTasks(final HRegion r, final CatalogTracker ct,
-      final boolean daughter) throws KeeperException, IOException {
-    if (r instanceof TransactionalRegion) {
-      TransactionalRegion trxRegion = (TransactionalRegion) r;
-      trxRegion.setTransactionLog(trxHLog);
-      trxRegion.setTransactionalLeases(getTransactionalLeases());
-    }
-    super.postOpenDeployTasks(r, ct, daughter);
-  }
-
-  protected TransactionalRegion getTransactionalRegion(final byte[] regionName)
-      throws NotServingRegionException {
-    return (TransactionalRegion) super.getRegion(regionName);
-  }
-
-  protected Leases getTransactionalLeases() {
-    return this.transactionLeases;
-  }
-
-  /**
-   * We want to delay the close region for a bit if we have commit pending
-   * transactions.
-   * 
-   * @throws NotServingRegionException
-   */
-  @Override
-  protected boolean closeRegion(HRegionInfo region, final boolean abort,
-      final boolean zk) {
-    try {
-      getTransactionalRegion(region.getRegionName()).prepareToClose();
-    } catch (NotServingRegionException e) {
-      LOG.warn(
-          "Failed to wait for uncommitted transactions to commit during region close.",
-          e);
-    }
-    return super.closeRegion(region, abort, zk);
-  }
-
-  /**
-   * Make sure that we close the trx WAL when regular WAL closes.
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  protected void closeWAL(final boolean delete) {
-    if (null != trxHLog) {
-      try {
-        trxHLog.close();
-      } catch (Throwable e) {
-        LOG.error("Close and delete of trx WAL failed",
-            RemoteExceptionHandler.checkThrowable(e));
-      }
+    /**
+     * @param conf
+     * @throws IOException
+     */
+    public TransactionalRegionServer(final Configuration conf) throws IOException, InterruptedException {
+        super(conf);
+        cleanOldTransactionsThread = new CleanOldTransactionsChore(this);
+        transactionLeases = new Leases(conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME), LEASE_CHECK_FREQUENCY);
+        LOG.info("Transaction lease time: " + conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME));
     }
 
-    // If delete then whole log dir is removed including the trxHLog.
-    super.closeWAL(delete);
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public void abortTransaction(final byte[] regionName, final long transactionId)
-      throws IOException {
-    checkOpen();
-    super.getRequestCount().incrementAndGet();
-    try {
-      getTransactionalRegion(regionName).abort(transactionId);
-    } catch (NotServingRegionException e) {
-      LOG.info("Got not serving region durring abort. Ignoring.");
-    } catch (IOException e) {
-      checkFileSystem();
-      throw e;
+    protected THLog getTransactionLog() {
+        return trxHLog;
     }
-  }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public void commit(final byte[] regionName, final long transactionId)
-      throws IOException {
-    checkOpen();
-    super.getRequestCount().incrementAndGet();
-    try {
-      getTransactionalRegion(regionName).commit(transactionId);
-    } catch (IOException e) {
-      checkFileSystem();
-      throw e;
+    /**
+     * Make sure we add a listener for closing the transactional log when the regular WAL closes.
+     */
+    @Override
+    protected List<WALObserver> getWALActionListeners() {
+        List<WALObserver> listeners = super.getWALActionListeners();
+        listeners.add(new WALObserver() {
+
+            @Override
+            public void logCloseRequested() {
+                closeTransactionWAL();
+            }
+
+            @Override
+            public void logRolled(final Path newFile) {
+                // don't care
+            }
+
+            @Override
+            public void logRollRequested() {
+                // don't care
+            }
+
+            @Override
+            public void visitLogEntryBeforeWrite(final HRegionInfo info, final HLogKey logKey, final WALEdit logEdit) {
+                // don't care
+            }
+        });
+        return listeners;
     }
-  }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public int commitRequest(final byte[] regionName, final long transactionId)
-      throws IOException {
-    checkOpen();
-    super.getRequestCount().incrementAndGet();
-    try {
-      return getTransactionalRegion(regionName).commitRequest(transactionId);
-    } catch (IOException e) {
-      checkFileSystem();
-      throw e;
+    @Override
+    public long getProtocolVersion(final String protocol, final long clientVersion) throws IOException {
+        if (protocol.equals(TransactionalRegionInterface.class.getName())) {
+            return HBaseRPCProtocolVersion.versionID;
+        }
+        return super.getProtocolVersion(protocol, clientVersion);
     }
-  }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public boolean commitIfPossible(final byte[] regionName,
-      final long transactionId) throws IOException {
-    checkOpen();
-    super.getRequestCount().incrementAndGet();
-    try {
-      return getTransactionalRegion(regionName).commitIfPossible(transactionId);
-    } catch (IOException e) {
-      checkFileSystem();
-      throw e;
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected void handleReportForDutyResponse(final MapWritable c) throws IOException {
+        super.handleReportForDutyResponse(c);
+        initializeTHLog();
+        String n = Thread.currentThread().getName();
+        UncaughtExceptionHandler handler = new UncaughtExceptionHandler() {
+
+            public void uncaughtException(final Thread t, final Throwable e) {
+                abort("Set stop flag in " + t.getName(), e);
+                LOG.fatal("Set stop flag in " + t.getName(), e);
+            }
+        };
+        Threads.setDaemonThreadRunning(this.cleanOldTransactionsThread, n + ".oldTransactionCleaner", handler);
+        Threads.setDaemonThreadRunning(this.transactionLeases, "Transactional leases");
     }
-  }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public long openScanner(final long transactionId, final byte[] regionName,
-      final Scan scan) throws IOException {
-    checkOpen();
-    NullPointerException npe = null;
-    if (regionName == null) {
-      npe = new NullPointerException("regionName is null");
-    } else if (scan == null) {
-      npe = new NullPointerException("scan is null");
+    private void initializeTHLog() throws IOException {
+        // We keep in the same directory as the core HLog.
+        Path oldLogDir = new Path(getRootDir(), HLogSplitter.RECOVERED_EDITS);
+        Path logdir = new Path(getRootDir(), HLog.getHLogDirectoryName(this.serverInfo));
+
+        trxHLog = new THLog(getFileSystem(), logdir, oldLogDir, conf, null);
     }
-    if (npe != null) {
-      throw new IOException("Invalid arguments to openScanner", npe);
+
+    @Override
+    public void postOpenDeployTasks(final HRegion r, final CatalogTracker ct, final boolean daughter)
+            throws KeeperException, IOException {
+        if (r instanceof TransactionalRegion) {
+            TransactionalRegion trxRegion = (TransactionalRegion) r;
+            trxRegion.setTransactionLog(trxHLog);
+            trxRegion.setTransactionalLeases(getTransactionalLeases());
+        }
+        super.postOpenDeployTasks(r, ct, daughter);
     }
-    super.getRequestCount().incrementAndGet();
-    try {
-      TransactionalRegion r = getTransactionalRegion(regionName);
-      InternalScanner s = r.getScanner(transactionId, scan);
-      long scannerId = addScanner(s);
-      return scannerId;
-    } catch (IOException e) {
-      LOG.error("Error opening scanner (fsOk: " + this.fsOk + ")",
-          RemoteExceptionHandler.checkIOException(e));
-      checkFileSystem();
-      throw e;
+
+    protected TransactionalRegion getTransactionalRegion(final byte[] regionName) throws NotServingRegionException {
+        return (TransactionalRegion) super.getRegion(regionName);
     }
-  }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public void beginTransaction(final long transactionId, final byte[] regionName)
-      throws IOException {
-    getTransactionalRegion(regionName).beginTransaction(transactionId);
-  }
+    protected Leases getTransactionalLeases() {
+        return this.transactionLeases;
+    }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public void delete(final long transactionId, final byte[] regionName,
-      final Delete delete) throws IOException {
-    getTransactionalRegion(regionName).delete(transactionId, delete);
-  }
+    /**
+     * We want to delay the close region for a bit if we have commit pending transactions.
+     * 
+     * @throws NotServingRegionException
+     */
+    @Override
+    protected boolean closeRegion(final HRegionInfo region, final boolean abort, final boolean zk) {
+        try {
+            getTransactionalRegion(region.getRegionName()).prepareToClose();
+        } catch (NotServingRegionException e) {
+            LOG.warn("Failed to wait for uncommitted transactions to commit during region close.", e);
+        }
+        return super.closeRegion(region, abort, zk);
+    }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public Result get(final long transactionId, final byte[] regionName,
-      final Get get) throws IOException {
-    return getTransactionalRegion(regionName).get(transactionId, get);
-  }
+    /**
+     * Close the transaction log.
+     */
+    private void closeTransactionWAL() {
+        if (null != trxHLog) {
+            try {
+                trxHLog.close();
+            } catch (Throwable e) {
+                LOG.error("Close and delete of trx WAL failed", RemoteExceptionHandler.checkThrowable(e));
+            }
+        }
+    }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public void put(final long transactionId, final byte[] regionName,
-      final Put put) throws IOException {
-    getTransactionalRegion(regionName).put(transactionId, put);
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void abortTransaction(final byte[] regionName, final long transactionId) throws IOException {
+        checkOpen();
+        super.getRequestCount().incrementAndGet();
+        try {
+            getTransactionalRegion(regionName).abort(transactionId);
+        } catch (NotServingRegionException e) {
+            LOG.info("Got not serving region durring abort. Ignoring.");
+        } catch (IOException e) {
+            checkFileSystem();
+            throw e;
+        }
+    }
 
-  }
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void commit(final byte[] regionName, final long transactionId) throws IOException {
+        checkOpen();
+        super.getRequestCount().incrementAndGet();
+        try {
+            getTransactionalRegion(regionName).commit(transactionId);
+        } catch (IOException e) {
+            checkFileSystem();
+            throw e;
+        }
+    }
 
-  /**
-   * 
-   * {@inheritDoc}
-   */
-  @Override
-  public int put(final long transactionId, final byte[] regionName,
-      final Put[] puts) throws IOException {
-    getTransactionalRegion(regionName).put(transactionId, puts);
-    return puts.length; // ??
-  }
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int commitRequest(final byte[] regionName, final long transactionId) throws IOException {
+        checkOpen();
+        super.getRequestCount().incrementAndGet();
+        try {
+            return getTransactionalRegion(regionName).commitRequest(transactionId);
+        } catch (IOException e) {
+            checkFileSystem();
+            throw e;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean commitIfPossible(final byte[] regionName, final long transactionId) throws IOException {
+        checkOpen();
+        super.getRequestCount().incrementAndGet();
+        try {
+            return getTransactionalRegion(regionName).commitIfPossible(transactionId);
+        } catch (IOException e) {
+            checkFileSystem();
+            throw e;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public long openScanner(final long transactionId, final byte[] regionName, final Scan scan) throws IOException {
+        checkOpen();
+        NullPointerException npe = null;
+        if (regionName == null) {
+            npe = new NullPointerException("regionName is null");
+        } else if (scan == null) {
+            npe = new NullPointerException("scan is null");
+        }
+        if (npe != null) {
+            throw new IOException("Invalid arguments to openScanner", npe);
+        }
+        super.getRequestCount().incrementAndGet();
+        try {
+            TransactionalRegion r = getTransactionalRegion(regionName);
+            InternalScanner s = r.getScanner(transactionId, scan);
+            long scannerId = addScanner(s);
+            return scannerId;
+        } catch (IOException e) {
+            LOG.error("Error opening scanner (fsOk: " + this.fsOk + ")", RemoteExceptionHandler.checkIOException(e));
+            checkFileSystem();
+            throw e;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void beginTransaction(final long transactionId, final byte[] regionName) throws IOException {
+        getTransactionalRegion(regionName).beginTransaction(transactionId);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void delete(final long transactionId, final byte[] regionName, final Delete delete) throws IOException {
+        getTransactionalRegion(regionName).delete(transactionId, delete);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Result get(final long transactionId, final byte[] regionName, final Get get) throws IOException {
+        return getTransactionalRegion(regionName).get(transactionId, get);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void put(final long transactionId, final byte[] regionName, final Put put) throws IOException {
+        getTransactionalRegion(regionName).put(transactionId, put);
+
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int put(final long transactionId, final byte[] regionName, final Put[] puts) throws IOException {
+        getTransactionalRegion(regionName).put(transactionId, puts);
+        return puts.length; // ??
+    }
 }

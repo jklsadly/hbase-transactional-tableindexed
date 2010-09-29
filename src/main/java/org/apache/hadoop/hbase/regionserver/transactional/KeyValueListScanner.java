@@ -11,10 +11,10 @@
 
 package org.apache.hadoop.hbase.regionserver.transactional;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -22,16 +22,18 @@ import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 /**
  * A fixture that implements and presents a KeyValueScanner. It takes a list of key/values which is then sorted
  * according to the provided comparator, and then the whole thing pretends to be a store file scanner.
+ * <p>
+ * Note: This class was copied from {@link org.apache.hadoop.hbase.regionserver.KeyValueScanFixture} and modified.
  */
-// FIXME : this code was copied over from core-hbase tests.
-public class KeyValueScanFixture implements KeyValueScanner {
+public class KeyValueListScanner implements KeyValueScanner {
 
     ArrayList<KeyValue> data;
     Iterator<KeyValue> iter = null;
     KeyValue current = null;
     KeyValue.KVComparator comparator;
+    long sequenceId = 0;
 
-    public KeyValueScanFixture(final KeyValue.KVComparator comparator, final KeyValue ... incData) {
+    public KeyValueListScanner(KeyValue.KVComparator comparator, KeyValue ... incData) {
         this.comparator = comparator;
 
         data = new ArrayList<KeyValue>(incData.length);
@@ -43,6 +45,14 @@ public class KeyValueScanFixture implements KeyValueScanner {
         this.current = data.size() > 0 ? data.get(0) : null;
     }
 
+    public static List<KeyValueScanner> scanFixture(KeyValue[] ... kvArrays) {
+        ArrayList<KeyValueScanner> scanners = new ArrayList<KeyValueScanner>();
+        for (KeyValue[] kvs : kvArrays) {
+            scanners.add(new KeyValueListScanner(KeyValue.COMPARATOR, kvs));
+        }
+        return scanners;
+    }
+
     @Override
     public KeyValue peek() {
         return this.current;
@@ -52,16 +62,15 @@ public class KeyValueScanFixture implements KeyValueScanner {
     public KeyValue next() {
         KeyValue res = current;
 
-        if (iter.hasNext()) {
+        if (iter.hasNext())
             current = iter.next();
-        } else {
+        else
             current = null;
-        }
         return res;
     }
 
     @Override
-    public boolean seek(final KeyValue key) {
+    public boolean seek(KeyValue key) {
         // start at beginning.
         iter = data.iterator();
         int cmp;
@@ -78,7 +87,6 @@ public class KeyValueScanFixture implements KeyValueScanner {
         return true;
     }
 
-
     @Override
     public boolean reseek(KeyValue key) {
         return seek(key);
@@ -87,5 +95,20 @@ public class KeyValueScanFixture implements KeyValueScanner {
     @Override
     public void close() {
         // noop.
+    }
+
+    /**
+     * Set the sequenceId of this scanner which determines the priority in which it is used against other scanners.
+     * Default is 0 (low priority).
+     * 
+     * @param sequenceId
+     */
+    public void setSequenceID(long sequenceId) {
+        this.sequenceId = sequenceId;
+    }
+
+    @Override
+    public long getSequenceID() {
+        return sequenceId;
     }
 }
