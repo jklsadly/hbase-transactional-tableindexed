@@ -10,6 +10,8 @@
  */
 package org.apache.hadoop.hbase.regionserver.transactional;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
@@ -20,10 +22,10 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
@@ -33,10 +35,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.LeaseException;
-import org.apache.hadoop.hbase.LeaseListener;
-import org.apache.hadoop.hbase.Leases;
-import org.apache.hadoop.hbase.Leases.LeaseStillHeldException;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
@@ -44,13 +42,20 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.transactional.HBaseBackedTransactionLogger;
 import org.apache.hadoop.hbase.client.transactional.UnknownTransactionException;
+import org.apache.hadoop.hbase.filter.FilterBase;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
 import org.apache.hadoop.hbase.regionserver.FlushRequester;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
+import org.apache.hadoop.hbase.regionserver.LeaseException;
+import org.apache.hadoop.hbase.regionserver.LeaseListener;
+import org.apache.hadoop.hbase.regionserver.Leases;
+import org.apache.hadoop.hbase.regionserver.Leases.LeaseStillHeldException;
 import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionState.Status;
+import org.apache.hadoop.hbase.regionserver.transactional.TransactionState.WriteAction;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
@@ -94,7 +99,7 @@ public class TransactionalRegion extends HRegion {
     private Object commitCheckLock = new Object();
     private THLog transactionLog;
     private final int oldTransactionFlushTrigger;
-    private final Leases transactionLeases;
+    private Leases transactionLeases;
 
     /**
      * @param basedir
@@ -104,13 +109,26 @@ public class TransactionalRegion extends HRegion {
      * @param regionInfo
      * @param flushListener
      */
-    public TransactionalRegion(final Path basedir, final HLog log, final THLog trxLog, final FileSystem fs,
-            final Configuration conf, final HRegionInfo regionInfo, final FlushRequester flushListener,
-            final Leases transactionalLeases) {
+    public TransactionalRegion(final Path basedir, final HLog log, final FileSystem fs, final Configuration conf,
+            final HRegionInfo regionInfo, final FlushRequester flushListener) {
         super(basedir, log, fs, conf, regionInfo, flushListener);
-        this.transactionLog = trxLog;
         oldTransactionFlushTrigger = conf.getInt(OLD_TRANSACTION_FLUSH, DEFAULT_OLD_TRANSACTION_FLUSH);
-        this.transactionLeases = transactionalLeases;
+    }
+
+    /**
+     * Open HRegion. Calls initialize and sets sequenceid to both regular WAL and trx WAL.
+     * 
+     * @param reporter
+     * @return Returns <code>this</code>
+     * @throws IOException
+     */
+    @Override
+    protected HRegion openHRegion(final Progressable reporter) throws IOException {
+        super.openHRegion(reporter);
+        if (this.transactionLog != null) {
+            this.transactionLog.setSequenceNumber(super.getLog().getSequenceNumber());
+        }
+        return this;
     }
 
     @Override
@@ -130,7 +148,8 @@ public class TransactionalRegion extends HRegion {
 
         Path trxPath = new Path(oldCoreLogFile.getParent(), THLog.HREGION_OLD_THLOGFILE_NAME);
 
-        // We can ignore doing anything with the Trx Log table, it is not-transactional.
+        // We can ignore doing anything with the Trx Log table, it is
+        // not-transactional.
         if (super.getTableDesc().getNameAsString().equals(HBaseBackedTransactionLogger.TABLE_NAME)) {
             return;
         }
@@ -146,7 +165,8 @@ public class TransactionalRegion extends HRegion {
                 WALEdit b = entry.getValue();
 
                 for (KeyValue kv : b.getKeyValues()) {
-                    // FIXME need to convert these into puts and deletes. Not sure this is the write way.
+                    // FIXME need to convert these into puts and deletes. Not sure this is
+                    // the write way.
                     // Could probably combine multiple KV's into single put/delete.
                     // Also timestamps?
                     if (kv.getType() == KeyValue.Type.Put.getCode()) {
@@ -211,8 +231,8 @@ public class TransactionalRegion extends HRegion {
             throw new IOException("Already exiting transaction id: " + key);
         }
 
-        TransactionState state = new TransactionState(transactionId, super.getLog().getSequenceNumber(), super
-                .getRegionInfo());
+        TransactionState state = new TransactionState(transactionId, super.getLog().getSequenceNumber(),
+                super.getRegionInfo());
 
         state.setStartSequenceNumber(nextSequenceId.get());
         List<TransactionState> commitPendingCopy = new ArrayList<TransactionState>(commitPendingTransactions);
@@ -240,31 +260,19 @@ public class TransactionalRegion extends HRegion {
     }
 
     public Result get(final long transactionId, final Get get) throws IOException {
-        checkClosing();
+        Scan scan = new Scan(get);
+        List<KeyValue> results = new ArrayList<KeyValue>();
 
-        TransactionState state = getTransactionState(transactionId);
-
-        state.addRead(get.getRow());
-
-        Result superGet = super.get(get, null);
-        Result localGet = state.localGet(get);
-
-        if (localGet != null) {
-            LOG.trace("Transactional get of something we've written in the same transaction " + transactionId);
-
-            List<KeyValue> mergedGet = new ArrayList<KeyValue>(Arrays.asList(localGet.raw()));
-
-            if (superGet != null && !superGet.isEmpty()) {
-                for (KeyValue kv : superGet.raw()) {
-                    if (!localGet.containsColumn(kv.getFamily(), kv.getQualifier())) {
-                        mergedGet.add(kv);
-                    }
-                }
+        InternalScanner scanner = null;
+        try {
+            scanner = getScanner(transactionId, scan);
+            scanner.next(results);
+        } finally {
+            if (scanner != null) {
+                scanner.close();
             }
-            return new Result(mergedGet);
         }
-
-        return superGet;
+        return new Result(results);
     }
 
     /**
@@ -277,12 +285,59 @@ public class TransactionalRegion extends HRegion {
         state.addScan(scan);
         List<KeyValueScanner> scanners = new ArrayList<KeyValueScanner>(1);
         scanners.add(state.getScanner(scan));
-        return super.getScanner(scan, scanners);
+        return super.getScanner(wrapWithDeleteFilter(scan, state), scanners);
+    }
+
+    private Scan wrapWithDeleteFilter(final Scan scan, final TransactionState state) {
+        FilterBase deleteFilter = new FilterBase() {
+
+            private boolean rowFiltered = false;
+
+            @Override
+            public void reset() {
+                rowFiltered = false;
+            }
+
+            @Override
+            public boolean hasFilterRow() {
+                return true;
+            }
+
+            @Override
+            public void filterRow(final List<KeyValue> kvs) {
+                state.applyDeletes(kvs, scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
+                rowFiltered = kvs.isEmpty();
+            }
+
+            @Override
+            public boolean filterRow() {
+                return rowFiltered;
+            }
+
+            @Override
+            public void write(final DataOutput out) throws IOException {
+                // does nothing
+            }
+
+            @Override
+            public void readFields(final DataInput in) throws IOException {
+                // does nothing
+            }
+        };
+
+        if (scan.getFilter() == null) {
+            scan.setFilter(deleteFilter);
+            return scan;
+        }
+
+        FilterList wrappedFilter = new FilterList(Arrays.asList(deleteFilter, scan.getFilter()));
+        scan.setFilter(wrappedFilter);
+        return scan;
     }
 
     /**
      * Add a write to the transaction. Does not get applied until commit process.
-     *
+     * 
      * @param transactionId
      * @param put
      * @throws IOException
@@ -296,7 +351,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Add multiple writes to the transaction. Does not get applied until commit process.
-     *
+     * 
      * @param transactionId
      * @param puts
      * @throws IOException
@@ -312,7 +367,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Add a delete to the transaction. Does not get applied until commit process.
-     *
+     * 
      * @param transactionId
      * @param delete
      * @throws IOException
@@ -397,7 +452,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Commit the transaction.
-     *
+     * 
      * @param transactionId
      * @throws IOException
      */
@@ -423,7 +478,7 @@ public class TransactionalRegion extends HRegion {
 
     /**
      * Abort the transaction.
-     *
+     * 
      * @param transactionId
      * @throws IOException
      */
@@ -457,16 +512,22 @@ public class TransactionalRegion extends HRegion {
 
         LOG.debug("Commiting transaction: " + state.toString() + " to " + super.getRegionInfo().getRegionNameAsString());
 
-        // FIXME potential mix up here if some deletes should come before the puts.
-        for (Put update : state.getPuts()) {
-            this.put(update, true);
+        // Perform write operations timestamped to right now
+        List<WriteAction> writeOrdering = state.getWriteOrdering();
+        for (WriteAction action : writeOrdering) {
+            Put put = action.getPut();
+            if (null != put) {
+                this.put(put, true);
+            }
+
+            Delete delete = action.getDelete();
+            if (null != delete) {
+                delete(delete, null, true);
+            }
         }
 
-        for (Delete delete : state.getDeleteSet()) {
-            this.delete(delete, null, true);
-        }
-
-        // Now the transactional writes live in the core WAL, we can write a commit to the log
+        // Now the transactional writes live in the core WAL, we can write a commit
+        // to the log
         // so we don't have to recover it from the transactional WAL.
         if (state.hasWrite()) {
             this.transactionLog.writeCommitToLog(super.getRegionInfo(), state.getTransactionId());
@@ -606,15 +667,15 @@ public class TransactionalRegion extends HRegion {
                     debugMessage.append(" with sequence lower than [").append(minStartSeqNumber).append("].");
                 }
                 if (!commitedTransactionsBySequenceNumber.isEmpty()) {
-                    debugMessage.append(" Still have [").append(commitedTransactionsBySequenceNumber.size()).append(
-                        "] left.");
+                    debugMessage.append(" Still have [").append(commitedTransactionsBySequenceNumber.size())
+                            .append("] left.");
                 } else {
                     debugMessage.append(" None left.");
                 }
                 LOG.debug(debugMessage.toString());
             } else if (commitedTransactionsBySequenceNumber.size() > 0) {
-                debugMessage.append("Could not remove any transactions, and still have ").append(
-                    commitedTransactionsBySequenceNumber.size()).append(" left");
+                debugMessage.append("Could not remove any transactions, and still have ")
+                        .append(commitedTransactionsBySequenceNumber.size()).append(" left");
                 LOG.debug(debugMessage.toString());
             }
         }
@@ -650,6 +711,7 @@ public class TransactionalRegion extends HRegion {
             this.transactionName = n;
         }
 
+        @Override
         public void leaseExpired() {
             LOG.info("Transaction [" + this.transactionName + "] expired in region ["
                     + getRegionInfo().getRegionNameAsString() + "]");
@@ -693,5 +755,13 @@ public class TransactionalRegion extends HRegion {
                     LOG.warn("Unexpected status on expired lease");
             }
         }
+    }
+
+    public void setTransactionLog(final THLog trxHLog) {
+        this.transactionLog = trxHLog;
+    }
+
+    public void setTransactionalLeases(final Leases transactionalLeases) {
+        this.transactionLeases = transactionalLeases;
     }
 }

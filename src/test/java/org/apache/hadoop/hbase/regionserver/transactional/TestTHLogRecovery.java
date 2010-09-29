@@ -14,16 +14,16 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Collection;
 import java.util.List;
+import java.util.NavigableSet;
 
 import junit.framework.Assert;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -41,12 +41,12 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestTHLogRecovery {
@@ -80,18 +80,17 @@ public class TestTHLogRecovery {
 
         TEST_UTIL.startMiniCluster(3);
 
-
         HTableDescriptor desc = new HTableDescriptor(TABLE_NAME);
         desc.addFamily(new HColumnDescriptor(FAMILY));
         HBaseAdmin admin = TEST_UTIL.getHBaseAdmin();
 
         admin.createTable(desc);
-        HBaseBackedTransactionLogger.createTable();
+        HBaseBackedTransactionLogger.createTable(conf);
     }
 
     @AfterClass
     public static void tearDownClass() throws Throwable {
-         TEST_UTIL.shutdownMiniCluster();
+        TEST_UTIL.shutdownMiniCluster();
     }
 
     @Before
@@ -100,7 +99,7 @@ public class TestTHLogRecovery {
         HBaseTrxTestUtil.configureForIndexingAndTransactions(conf);
 
         table = new TransactionalTable(conf, TABLE_NAME);
-        transactionManager = new TransactionManager(new HBaseBackedTransactionLogger(), conf);
+        transactionManager = new TransactionManager(new HBaseBackedTransactionLogger(conf), conf);
         writeInitalRows();
 
         TEST_UTIL.getHBaseCluster().startRegionServer();
@@ -128,7 +127,6 @@ public class TestTHLogRecovery {
         threadDumpingJoin(t);
         verifyWrites(8, 1, 1);
     }
-
 
     @Test
     public void testWithFlushBeforeCommit() throws IOException, CommitUnsuccessfulException {
@@ -166,7 +164,6 @@ public class TestTHLogRecovery {
         verifyWrites(TOTAL_VALUE, 0, 0);
     }
 
-
     @Test
     public void testWithFlushBeforeCommitThenAnother() throws IOException, CommitUnsuccessfulException {
         TransactionState state1 = makeTransaction(true);
@@ -191,11 +188,11 @@ public class TestTHLogRecovery {
         int server = -1;
         for (int i = 0; i < regionThreads.size() && server == -1; i++) {
             HRegionServer s = regionThreads.get(i).getRegionServer();
-            Collection<HRegion> regions = s.getOnlineRegions();
-            for (HRegion r : regions) {
+            NavigableSet<HRegionInfo> regions = s.getOnlineRegions();
+            for (HRegionInfo r : regions) {
                 if (Bytes.equals(r.getTableDesc().getName(), Bytes.toBytes(TABLE_NAME))) {
                     server = i;
-                    region = r;
+                    region = s.getOnlineRegion(r.getTableDesc().getName());
                 }
             }
         }
@@ -203,7 +200,8 @@ public class TestTHLogRecovery {
             LOG.fatal("could not find region server serving table region");
             Assert.fail();
         }
-        ((TransactionalRegionServer) regionThreads.get(server).getRegionServer()).getFlushRequester().request(region);
+        ((TransactionalRegionServer) regionThreads.get(server).getRegionServer()).getFlushRequester().requestFlush(
+            region);
     }
 
     /**
@@ -215,10 +213,10 @@ public class TestTHLogRecovery {
         int server = -1;
         for (int i = 0; i < regionThreads.size(); i++) {
             HRegionServer s = regionThreads.get(i).getRegionServer();
-            Collection<HRegion> regions = s.getOnlineRegions();
+            NavigableSet<HRegionInfo> regions = s.getOnlineRegions();
             LOG.info("server: " + regionThreads.get(i).getName());
-            for (HRegion r : regions) {
-                LOG.info("region: " + r.getRegionInfo().getRegionNameAsString());
+            for (HRegionInfo r : regions) {
+                LOG.info("region: " + r.getRegionNameAsString());
                 if (Bytes.equals(r.getTableDesc().getName(), Bytes.toBytes(TABLE_NAME))) {
                     server = i;
                 }
@@ -283,8 +281,8 @@ public class TestTHLogRecovery {
 
     private void verifyWrites(final int expectedRow1, final int expectedRow2, final int expectedRow3) throws IOException {
         Get get = new Get(ROW1).addColumn(FAMILY, QUAL_A);
-        Result result =  table.get(get);
-        
+        Result result = table.get(get);
+
         int row1 = Bytes.toInt(result.getValue(FAMILY, QUAL_A));
         int row2 = Bytes.toInt(table.get(new Get(ROW2).addColumn(FAMILY, QUAL_A)).getValue(FAMILY, QUAL_A));
         int row3 = Bytes.toInt(table.get(new Get(ROW3).addColumn(FAMILY, QUAL_A)).getValue(FAMILY, QUAL_A));
@@ -335,15 +333,15 @@ public class TestTHLogRecovery {
         if (t == null) {
             return;
         }
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         while (t.isAlive()) {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 LOG.info("Continuing...", e);
             }
-            if (System.currentTimeMillis() - startTime > 60000) {
-                startTime = System.currentTimeMillis();
+            if (EnvironmentEdgeManager.currentTimeMillis() - startTime > 60000) {
+                startTime = EnvironmentEdgeManager.currentTimeMillis();
                 ReflectionUtils.printThreadInfo(new PrintWriter(System.out),
                     "Automatic Stack Trace every 60 seconds waiting on " + t.getName());
             }

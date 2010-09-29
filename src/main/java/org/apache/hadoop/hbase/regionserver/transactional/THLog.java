@@ -20,12 +20,13 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.regionserver.transactional.TransactionState.WriteAction;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.LogRollListener;
 import org.apache.hadoop.hbase.regionserver.wal.SequenceFileLogReader;
 import org.apache.hadoop.hbase.regionserver.wal.SequenceFileLogWriter;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.regionserver.wal.WALObserver;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 
 /**
  * Add support for transactional operations to the regionserver's write-ahead-log.
@@ -38,19 +39,19 @@ public class THLog extends HLog {
     static final String HREGION_OLD_THLOGFILE_NAME = "oldthlogfile.log";
 
     public THLog(final FileSystem fs, final Path dir, final Path oldLogDir, final Configuration conf,
-            final LogRollListener listener) throws IOException {
-        super(fs, dir, oldLogDir, conf, listener, null, false, null);
+            final List<WALObserver> listeners) throws IOException {
+        super(fs, dir, oldLogDir, conf, listeners, false, null);
     }
 
     /**
      * Get a writer for the WAL.
-     *
+     * 
      * @param path
      * @param conf
      * @return A WAL writer. Close when done with it.
      * @throws IOException
      */
-     public static Writer createWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
+    public static Writer createWriter(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         try {
             HLog.Writer writer = new SequenceFileLogWriter(THLogKey.class);
             writer.init(fs, path, conf);
@@ -62,14 +63,15 @@ public class THLog extends HLog {
         }
     }
 
-     @Override
-    protected Writer createWriterInstance(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
+    @Override
+    protected Writer createWriterInstance(final FileSystem fs, final Path path, final Configuration conf)
+            throws IOException {
         return createWriter(fs, path, conf);
     }
 
     /**
      * This is a convenience method that computes a new filename with a given file-number.
-     *
+     * 
      * @param fn
      * @return Path
      */
@@ -81,14 +83,14 @@ public class THLog extends HLog {
 
     /**
      * Get a reader for the WAL.
-     *
+     * 
      * @param fs
      * @param path
      * @param conf
      * @return A WAL reader. Close when done with it.
      * @throws IOException
      */
-     public static Reader getReader(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
+    public static Reader getReader(final FileSystem fs, final Path path, final Configuration conf) throws IOException {
         try {
             HLog.Reader reader = new SequenceFileLogReader(THLogKey.class);
             reader.init(fs, path, conf);
@@ -111,7 +113,7 @@ public class THLog extends HLog {
      */
     public void writeCommitResuestToLog(final HRegionInfo regionInfo, final TransactionState transactionState)
             throws IOException {
-        this.appendCommitRequest(regionInfo, System.currentTimeMillis(), transactionState);
+        this.appendCommitRequest(regionInfo, EnvironmentEdgeManager.currentTimeMillis(), transactionState);
     }
 
     /**
@@ -120,7 +122,7 @@ public class THLog extends HLog {
      * @throws IOException
      */
     public void writeCommitToLog(final HRegionInfo regionInfo, final long transactionId) throws IOException {
-        this.append(regionInfo, System.currentTimeMillis(), THLogKey.TrxOp.COMMIT, transactionId);
+        this.append(regionInfo, EnvironmentEdgeManager.currentTimeMillis(), THLogKey.TrxOp.COMMIT, transactionId);
     }
 
     /**
@@ -129,12 +131,12 @@ public class THLog extends HLog {
      * @throws IOException
      */
     public void writeAbortToLog(final HRegionInfo regionInfo, final long transactionId) throws IOException {
-        this.append(regionInfo, System.currentTimeMillis(), THLogKey.TrxOp.ABORT, transactionId);
+        this.append(regionInfo, EnvironmentEdgeManager.currentTimeMillis(), THLogKey.TrxOp.ABORT, transactionId);
     }
 
     /**
      * Write a general transaction op to the log. This covers: start, commit, and abort.
-     *
+     * 
      * @param regionInfo
      * @param now
      * @param txOp
@@ -152,7 +154,7 @@ public class THLog extends HLog {
 
     /**
      * Write a transactional state to the log for a commit request.
-     *
+     * 
      * @param regionInfo
      * @param update
      * @param transactionId
@@ -166,29 +168,14 @@ public class THLog extends HLog {
 
         WALEdit e = new WALEdit();
 
-        for (Put put : transactionState.getPuts()) {
-            for (KeyValue value : convertToKeyValues(put)) {
+        for (WriteAction write : transactionState.getWriteOrdering()) {
+            for (KeyValue value : write.getKeyValues()) {
                 e.add(value);
             }
         }
-        for (Delete del : transactionState.getDeleteSet()) {
-            for (KeyValue value : convertToKeyValues(del)) {
-                e.add(value);
-            }
-        }
+
         super.append(regionInfo, key, e);
 
-    }
-
-    private List<KeyValue> convertToKeyValues(final Put update) {
-        List<KeyValue> edits = new ArrayList<KeyValue>();
-
-        for (List<KeyValue> kvs : update.getFamilyMap().values()) {
-            for (KeyValue kv : kvs) {
-                edits.add(kv);
-            }
-        }
-        return edits;
     }
 
     private List<KeyValue> convertToKeyValues(final Delete delete) {

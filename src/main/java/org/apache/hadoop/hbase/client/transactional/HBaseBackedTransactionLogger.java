@@ -13,6 +13,7 @@ package org.apache.hadoop.hbase.client.transactional;
 import java.io.IOException;
 import java.util.Random;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -39,14 +40,24 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
     private static final byte[] STATUS_QUALIFIER = Bytes.toBytes("Status");
 
     /**
-     * Create the table.
+     * Create the global transaction table.
      * 
      * @throws IOException
      */
     public static void createTable() throws IOException {
+        createTable(HBaseConfiguration.create());
+    }
+
+    /**
+     * Create the global transaction table with the given configuration.
+     * 
+     * @param conf
+     * @throws IOException
+     */
+    public static void createTable(Configuration conf) throws IOException {
         HTableDescriptor tableDesc = new HTableDescriptor(TABLE_NAME);
         tableDesc.addFamily(new HColumnDescriptor(INFO_FAMILY));
-        HBaseAdmin admin = new HBaseAdmin(HBaseConfiguration.create());
+        HBaseAdmin admin = new HBaseAdmin(conf);
         admin.createTable(tableDesc);
     }
 
@@ -65,11 +76,15 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
     }
 
     public HBaseBackedTransactionLogger() throws IOException {
-        initTable();
+        initTable(HBaseConfiguration.create());
     }
 
-    private void initTable() throws IOException {
-        HBaseAdmin admin = new HBaseAdmin(new HBaseConfiguration());
+    public HBaseBackedTransactionLogger(Configuration conf) throws IOException {
+        initTable(conf);
+    }
+
+    private void initTable(Configuration conf) throws IOException {
+        HBaseAdmin admin = new HBaseAdmin(conf);
 
         if (!admin.tableExists(TABLE_NAME)) {
             throw new RuntimeException("Table not created. Call createTable() first");

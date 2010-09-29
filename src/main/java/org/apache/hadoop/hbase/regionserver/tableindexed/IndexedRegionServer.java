@@ -25,31 +25,21 @@ import org.apache.hadoop.util.Progressable;
 /**
  * RegionServer which maintains secondary indexes.
  **/
-public class IndexedRegionServer extends TransactionalRegionServer implements IndexedRegionInterface {
+public class IndexedRegionServer extends TransactionalRegionServer implements
+    IndexedRegionInterface {
 
-    public IndexedRegionServer(final Configuration conf) throws IOException {
-        super(conf);
-    }
+  public IndexedRegionServer(final Configuration conf) throws IOException,
+      InterruptedException {
+    super(conf);
+  }
 
-    @Override
-    public long getProtocolVersion(final String protocol, final long clientVersion) throws IOException {
-        if (protocol.equals(IndexedRegionInterface.class.getName())) {
-            return HBaseRPCProtocolVersion.versionID;
-        }
-        return super.getProtocolVersion(protocol, clientVersion);
+  @Override
+  public long getProtocolVersion(final String protocol, final long clientVersion)
+      throws IOException {
+    if (protocol.equals(IndexedRegionInterface.class.getName())) {
+      return HBaseRPCProtocolVersion.versionID;
     }
-
-    @Override
-    protected HRegion instantiateRegion(final HRegionInfo regionInfo) {
-        HRegion r;
-        try {
-            r = new IndexedRegion(HTableDescriptor.getTableDir(super.getRootDir(), regionInfo.getTableDesc().getName()),
-                    super.hlog, super.getTransactionLog(), super.getFileSystem(), super.conf, regionInfo,
-                    super.getFlushRequester(), super.getTransactionalLeases());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return r;
-    }
+    return super.getProtocolVersion(protocol, clientVersion);
+  }
 
 }

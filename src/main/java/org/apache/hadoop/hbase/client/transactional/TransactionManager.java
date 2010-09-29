@@ -17,9 +17,11 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.NotServingRegionException;
+import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 
 /**
  * Transaction Manager. Responsible for committing transactions.
@@ -34,16 +36,19 @@ public class TransactionManager {
 
     /**
      * @param conf
+     * @throws ZooKeeperConnectionException
      */
-    public TransactionManager(final Configuration conf) {
+    public TransactionManager(final Configuration conf) throws ZooKeeperConnectionException {
         this(LocalTransactionLogger.getInstance(), conf);
     }
 
     /**
      * @param transactionLogger
      * @param conf
+     * @throws ZooKeeperConnectionException
      */
-    public TransactionManager(final TransactionLogger transactionLogger, final Configuration conf) {
+    public TransactionManager(final TransactionLogger transactionLogger, final Configuration conf)
+            throws ZooKeeperConnectionException {
         this.transactionLogger = transactionLogger;
         connection = HConnectionManager.getConnection(conf);
     }
@@ -127,7 +132,7 @@ public class TransactionManager {
      * @throws CommitUnsuccessfulException
      */
     public void tryCommit(final TransactionState transactionState) throws CommitUnsuccessfulException, IOException {
-        long startTime = System.currentTimeMillis();
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         LOG.trace("atempting to commit trasaction: " + transactionState.toString());
         int status = prepareCommit(transactionState);
 
@@ -140,7 +145,7 @@ public class TransactionManager {
             throw new CommitUnsuccessfulException();
         }
         LOG.trace("Committed transaction [" + transactionState.getTransactionId() + "] in ["
-                + ((System.currentTimeMillis() - startTime)) + "]ms");
+                + ((EnvironmentEdgeManager.currentTimeMillis() - startTime)) + "]ms");
     }
 
     /**
@@ -149,7 +154,7 @@ public class TransactionManager {
      * @param transactionState
      * @throws CommitUnsuccessfulException
      */
-    public void doCommit(final TransactionState transactionState) throws CommitUnsuccessfulException {
+    void doCommit(final TransactionState transactionState) throws CommitUnsuccessfulException {
         try {
             LOG.trace("Commiting [" + transactionState.getTransactionId() + "]");
 
@@ -162,8 +167,8 @@ public class TransactionManager {
                 }
                 TransactionalRegionInterface transactionalRegionServer = (TransactionalRegionInterface) connection
                         .getHRegionConnection(location.getServerAddress());
-                transactionalRegionServer.commit(location.getRegionInfo().getRegionName(), transactionState
-                        .getTransactionId());
+                transactionalRegionServer.commit(location.getRegionInfo().getRegionName(),
+                    transactionState.getTransactionId());
             }
         } catch (Exception e) {
             LOG.info("Commit of transaction [" + transactionState.getTransactionId() + "] was unsucsessful", e);
@@ -196,8 +201,8 @@ public class TransactionManager {
                 TransactionalRegionInterface transactionalRegionServer = (TransactionalRegionInterface) connection
                         .getHRegionConnection(location.getServerAddress());
 
-                transactionalRegionServer.abortTransaction(location.getRegionInfo().getRegionName(), transactionState
-                        .getTransactionId());
+                transactionalRegionServer.abortTransaction(location.getRegionInfo().getRegionName(),
+                    transactionState.getTransactionId());
             } catch (UnknownTransactionException e) {
                 LOG.info("Got unknown transaciton exception durring abort. Transaction: ["
                         + transactionState.getTransactionId() + "], region: ["
