@@ -1,5 +1,19 @@
 This project is a transactional and indexing extension for hbase. 
 
+Current status:
+
+Recently updated to work the HBase 0.89.0-SNAPSHOT trunk. Most tests pass but until HBase trunk stabilizes no guarantee that this project is stable either.
+
+Working Features:
+
+* Ability to create manage and query with pre-defined table indexes.
+* Ability to perform multiple HBase operations with ACID transactions.
+
+Known limitations:
+* Currently combining non-transactional puts and transactional operations on the same table may have undesirable side-effects. We still need to test and account for this.
+* Doing a transactional Delete.addColumn() behaves like a Delete.addColumns() so it isn't possible to just delete the latest version of a cell.
+* We need better documentation!
+
 Installation:
  Drop the jar in the classpath of your application
  
