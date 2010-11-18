@@ -11,17 +11,18 @@
 package org.apache.hadoop.hbase.client.tableindexed;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.Map.Entry;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ColumnNameParseException;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
@@ -40,6 +41,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class IndexedTableAdmin extends HBaseAdmin {
 
     private static final Log LOG = LogFactory.getLog(IndexedTableAdmin.class);
+    private static final int BATCH_SIZE = 100;
 
     /**
      * Constructor
@@ -105,7 +107,8 @@ public class IndexedTableAdmin extends HBaseAdmin {
 
     /** Add an index to a table. */
     public void addIndex(final byte[] baseTableName, final IndexSpecification indexSpec) throws IOException {
-        LOG.warn("Adding index to existing table [" + Bytes.toString(baseTableName) + "], this may take a long time");
+        LOG.warn("Adding index [" + indexSpec.getIndexId() + "] to existing table [" + Bytes.toString(baseTableName)
+                + "], this may take a long time");
         // TODO, make table read-only
         LOG.warn("Not putting table in readonly, if its being written to, the index may get out of sync");
         HTableDescriptor indexTableDesc = createIndexTableDesc(baseTableName, indexSpec);
@@ -122,19 +125,32 @@ public class IndexedTableAdmin extends HBaseAdmin {
         HTable baseTable = new HTable(baseTableName);
         HTable indexTable = new HTable(indexSpec.getIndexedTableName(baseTableName));
         Scan scan = new Scan();
+        List<Put> batch = new ArrayList<Put>(BATCH_SIZE);
         scan.addColumns(indexSpec.getAllColumns());
         for (Result rowResult : baseTable.getScanner(scan)) {
             SortedMap<byte[], byte[]> columnValues = new TreeMap<byte[], byte[]>(Bytes.BYTES_COMPARATOR);
             for (Entry<byte[], NavigableMap<byte[], byte[]>> familyEntry : rowResult.getNoVersionMap().entrySet()) {
                 for (Entry<byte[], byte[]> cellEntry : familyEntry.getValue().entrySet()) {
-                    columnValues.put(Bytes.add(familyEntry.getKey(), Bytes.toBytes(":"), cellEntry.getKey()), cellEntry
-                            .getValue());
+                    columnValues.put(Bytes.add(familyEntry.getKey(), Bytes.toBytes(":"), cellEntry.getKey()),
+                        cellEntry.getValue());
                 }
             }
             if (IndexMaintenanceUtils.doesApplyToIndex(indexSpec, columnValues)) {
                 Put indexUpdate = IndexMaintenanceUtils.createIndexUpdate(indexSpec, rowResult.getRow(), columnValues);
-                indexTable.put(indexUpdate);
+                batch.add(indexUpdate);
+                if (batch.size() >= BATCH_SIZE) {
+                    flushBatch(batch, indexTable);
+                }
             }
+
+        }
+
+        flushBatch(batch, indexTable);
+    }
+
+    private void flushBatch(final List<Put> batch, final HTable indexTable) throws IOException {
+        if (!batch.isEmpty()) {
+            indexTable.put(batch);
         }
     }
 }
