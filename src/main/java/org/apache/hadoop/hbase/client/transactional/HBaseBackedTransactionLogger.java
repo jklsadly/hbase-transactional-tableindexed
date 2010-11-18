@@ -13,6 +13,7 @@ package org.apache.hadoop.hbase.client.transactional;
 import java.io.IOException;
 import java.util.Random;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -47,7 +48,9 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
         HTableDescriptor tableDesc = new HTableDescriptor(TABLE_NAME);
         tableDesc.addFamily(new HColumnDescriptor(INFO_FAMILY));
         HBaseAdmin admin = new HBaseAdmin(HBaseConfiguration.create());
-        admin.createTable(tableDesc);
+        if (!admin.tableExists(TABLE_NAME)) {
+            admin.createTable(tableDesc);
+        }
     }
 
     private Random random = new Random();
@@ -69,7 +72,7 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
     }
 
     private void initTable() throws IOException {
-        HBaseAdmin admin = new HBaseAdmin(new HBaseConfiguration());
+        HBaseAdmin admin = new HBaseAdmin(new Configuration());
 
         if (!admin.tableExists(TABLE_NAME)) {
             throw new RuntimeException("Table not created. Call createTable() first");
