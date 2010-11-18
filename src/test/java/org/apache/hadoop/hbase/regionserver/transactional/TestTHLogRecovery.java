@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Collection;
 import java.util.List;
-import java.util.NavigableSet;
 
 import junit.framework.Assert;
 
@@ -188,7 +187,7 @@ public class TestTHLogRecovery {
         int server = -1;
         for (int i = 0; i < regionThreads.size() && server == -1; i++) {
             HRegionServer s = regionThreads.get(i).getRegionServer();
-            NavigableSet<HRegionInfo> regions = s.getOnlineRegions();
+            Collection<HRegionInfo> regions = s.getOnlineRegions();
             for (HRegionInfo r : regions) {
                 if (Bytes.equals(r.getTableDesc().getName(), Bytes.toBytes(TABLE_NAME))) {
                     server = i;
@@ -213,7 +212,7 @@ public class TestTHLogRecovery {
         int server = -1;
         for (int i = 0; i < regionThreads.size(); i++) {
             HRegionServer s = regionThreads.get(i).getRegionServer();
-            NavigableSet<HRegionInfo> regions = s.getOnlineRegions();
+            Collection<HRegionInfo> regions = s.getOnlineRegions();
             LOG.info("server: " + regionThreads.get(i).getName());
             for (HRegionInfo r : regions) {
                 LOG.info("region: " + r.getRegionNameAsString());
