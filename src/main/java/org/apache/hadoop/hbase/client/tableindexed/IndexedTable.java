@@ -41,19 +41,26 @@ public class IndexedTable extends TransactionalTable {
 
     static final Log LOG = LogFactory.getLog(IndexedTable.class);
 
-    private final IndexedTableDescriptor indexedTableDescriptor;
+    private IndexedTableDescriptor indexedTableDescriptor;
     private Map<String, HTable> indexIdToTable = new HashMap<String, HTable>();
 
     public IndexedTable(final Configuration conf, final byte[] tableName) throws IOException {
         super(conf, tableName);
-        this.indexedTableDescriptor = new IndexedTableDescriptor(super.getTableDescriptor());
-        for (IndexSpecification spec : this.indexedTableDescriptor.getIndexes()) {
-            indexIdToTable.put(spec.getIndexId(), new HTable(conf, spec.getIndexedTableName(tableName)));
-        }
+        updateIndexedTableDescriptor();
     }
 
     public IndexedTableDescriptor getIndexedTableDescriptor() {
         return this.indexedTableDescriptor;
+    }
+
+    private void updateIndexedTableDescriptor() throws IOException {
+        this.indexedTableDescriptor = new IndexedTableDescriptor(super.getTableDescriptor());
+        for (IndexSpecification spec : this.indexedTableDescriptor.getIndexes()) {
+            indexIdToTable.put(
+                spec.getIndexId(),
+                new HTable(getConfiguration(), spec.getIndexedTableName(indexedTableDescriptor.getBaseTableDescriptor()
+                        .getName())));
+        }
     }
 
     /**
@@ -76,8 +83,12 @@ public class IndexedTable extends TransactionalTable {
             IndexNotFoundException {
         IndexSpecification indexSpec = this.indexedTableDescriptor.getIndex(indexId);
         if (indexSpec == null) {
-            throw new IndexNotFoundException("Index " + indexId + " not defined in table "
-                    + super.getTableDescriptor().getNameAsString());
+            updateIndexedTableDescriptor();
+            indexSpec = this.indexedTableDescriptor.getIndex(indexId);
+            if (indexSpec == null) {
+                throw new IndexNotFoundException("Index " + indexId + " not defined in table "
+                        + super.getTableDescriptor().getNameAsString());
+            }
         }
         verifyIndexColumns(indexColumns, indexSpec);
         // TODO, verify/remove index columns from baseColumns
@@ -142,7 +153,9 @@ public class IndexedTable extends TransactionalTable {
         /** {@inheritDoc} */
         public Result next() throws IOException {
             Result[] result = next(1);
-            if (result == null || result.length < 1) return null;
+            if (result == null || result.length < 1) {
+                return null;
+            }
             return result[0];
         }
 

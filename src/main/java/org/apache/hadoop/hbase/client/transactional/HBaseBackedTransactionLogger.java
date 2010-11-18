@@ -54,11 +54,14 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
      * @param conf
      * @throws IOException
      */
-    public static void createTable(Configuration conf) throws IOException {
+    public static void createTable(final Configuration conf) throws IOException {
         HTableDescriptor tableDesc = new HTableDescriptor(TABLE_NAME);
         tableDesc.addFamily(new HColumnDescriptor(INFO_FAMILY));
         HBaseAdmin admin = new HBaseAdmin(conf);
         admin.createTable(tableDesc);
+        if (!admin.tableExists(TABLE_NAME)) {
+            admin.createTable(tableDesc);
+        }
     }
 
     private Random random = new Random();
@@ -79,11 +82,11 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
         initTable(HBaseConfiguration.create());
     }
 
-    public HBaseBackedTransactionLogger(Configuration conf) throws IOException {
+    public HBaseBackedTransactionLogger(final Configuration conf) throws IOException {
         initTable(conf);
     }
 
-    private void initTable(Configuration conf) throws IOException {
+    private void initTable(final Configuration conf) throws IOException {
         HBaseAdmin admin = new HBaseAdmin(conf);
 
         if (!admin.tableExists(TABLE_NAME)) {
