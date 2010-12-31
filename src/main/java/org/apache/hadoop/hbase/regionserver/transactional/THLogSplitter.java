@@ -6,17 +6,22 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Entry;
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Reader;
 import org.apache.hadoop.hbase.regionserver.wal.HLog.Writer;
+import org.apache.hadoop.hbase.regionserver.wal.HLogSplitter;
 
 /**
  * Extend core THLog splitter to make it also split the transactional logs.
- *
+ * 
  * @author clint.morgan
  */
 public class THLogSplitter extends HLogSplitter {
+
+    public THLogSplitter(final Configuration conf, final Path rootDir, final Path srcDir, final Path oldLogDir,
+            final FileSystem fs) {
+        super(conf, rootDir, srcDir, oldLogDir, fs);
+    }
 
     private boolean isTrxLog(final Path logfile) {
         return logfile.getName().contains(THLog.THLOG_DATFILE);
