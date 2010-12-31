@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.client.transactional.HBaseBackedTransactionLogger
 import org.apache.hadoop.hbase.client.transactional.TransactionManager;
 import org.apache.hadoop.hbase.client.transactional.TransactionState;
 import org.apache.hadoop.hbase.client.transactional.TransactionalTable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -95,7 +94,6 @@ public class TestTHLogRecovery {
     @Before
     public void setUp() throws Exception {
         Configuration conf = TEST_UTIL.getConfiguration();
-        HBaseTrxTestUtil.configureForIndexingAndTransactions(conf);
 
         table = new TransactionalTable(conf, TABLE_NAME);
         transactionManager = new TransactionManager(new HBaseBackedTransactionLogger(conf), conf);
@@ -180,27 +178,8 @@ public class TestTHLogRecovery {
         verifyWrites(6, 2, 2);
     }
 
-    private void flushRegionServer() {
-        List<JVMClusterUtil.RegionServerThread> regionThreads = TEST_UTIL.getHBaseCluster().getRegionServerThreads();
-
-        HRegion region = null;
-        int server = -1;
-        for (int i = 0; i < regionThreads.size() && server == -1; i++) {
-            HRegionServer s = regionThreads.get(i).getRegionServer();
-            Collection<HRegionInfo> regions = s.getOnlineRegions();
-            for (HRegionInfo r : regions) {
-                if (Bytes.equals(r.getTableDesc().getName(), Bytes.toBytes(TABLE_NAME))) {
-                    server = i;
-                    region = s.getOnlineRegion(r.getTableDesc().getName());
-                }
-            }
-        }
-        if (server == -1) {
-            LOG.fatal("could not find region server serving table region");
-            Assert.fail();
-        }
-        ((TransactionalRegionServer) regionThreads.get(server).getRegionServer()).getFlushRequester().requestFlush(
-            region);
+    private void flushRegionServer() throws IOException {
+        TEST_UTIL.flush(Bytes.toBytes(TABLE_NAME));
     }
 
     /**
