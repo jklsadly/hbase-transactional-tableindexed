@@ -58,7 +58,6 @@ public class HBaseBackedTransactionLogger implements TransactionLogger {
         HTableDescriptor tableDesc = new HTableDescriptor(TABLE_NAME);
         tableDesc.addFamily(new HColumnDescriptor(INFO_FAMILY));
         HBaseAdmin admin = new HBaseAdmin(conf);
-        admin.createTable(tableDesc);
         if (!admin.tableExists(TABLE_NAME)) {
             admin.createTable(tableDesc);
         }
