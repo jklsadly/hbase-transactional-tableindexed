@@ -121,7 +121,6 @@ class TransactionState {
         writeOrdering.add(new WriteAction(write));
     }
 
-    // FIXME REVIEW not sure about this. Needed for log recovery? but broke other tests.
     static void updateLatestTimestamp(final Collection<List<KeyValue>> kvsCollection, final long time) {
         byte[] timeBytes = Bytes.toBytes(time);
         // HAVE to manually set the KV timestamps
@@ -144,7 +143,6 @@ class TransactionState {
         if (delete.getTimeStamp() == HConstants.LATEST_TIMESTAMP) {
             delete.setTimestamp(now);
         }
-
         deletes.add(delete);
         writeOrdering.add(new WriteAction(delete));
     }
@@ -449,7 +447,8 @@ class TransactionState {
                 }
             }, getAllKVs(scan));
 
-            // We want transaction scanner to always take priority over store scanners.
+            // We want transaction scanner to always take priority over store
+            // scanners.
             setSequenceID(Long.MAX_VALUE);
 
             matcher = new ScanQueryMatcher(scan, null, null, HConstants.FOREVER, KeyValue.KEY_COMPARATOR,
@@ -532,7 +531,9 @@ class TransactionState {
 
     }
 
-    /** Simple wrapper for Put and Delete since they don't have a common enough interface. */
+    /**
+     * Simple wrapper for Put and Delete since they don't have a common enough interface.
+     */
     class WriteAction {
 
         private Put put;
@@ -577,7 +578,8 @@ class TransactionState {
                 kvsList = put.getFamilyMap().values();
             } else if (delete != null) {
                 if (delete.getFamilyMap().isEmpty()) {
-                    // If whole-row delete then we need to expand for each family
+                    // If whole-row delete then we need to expand for each
+                    // family
                     kvsList = new ArrayList<List<KeyValue>>(1);
                     for (byte[] family : regionInfo.getTableDesc().getFamiliesKeys()) {
                         KeyValue familyDelete = new KeyValue(delete.getRow(), family, null, delete.getTimeStamp(),
