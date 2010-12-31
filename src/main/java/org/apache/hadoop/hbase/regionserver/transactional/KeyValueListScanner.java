@@ -33,7 +33,7 @@ public class KeyValueListScanner implements KeyValueScanner {
     KeyValue.KVComparator comparator;
     long sequenceId = 0;
 
-    public KeyValueListScanner(KeyValue.KVComparator comparator, KeyValue ... incData) {
+    public KeyValueListScanner(final KeyValue.KVComparator comparator, final KeyValue ... incData) {
         this.comparator = comparator;
 
         data = new ArrayList<KeyValue>(incData.length);
@@ -42,10 +42,12 @@ public class KeyValueListScanner implements KeyValueScanner {
         }
         Collections.sort(data, this.comparator);
         this.iter = data.iterator();
-        this.current = data.size() > 0 ? data.get(0) : null;
+        if (!data.isEmpty()) {
+            this.current = KeyValue.createFirstOnRow(data.get(0).getRow());
+        }
     }
 
-    public static List<KeyValueScanner> scanFixture(KeyValue[] ... kvArrays) {
+    public static List<KeyValueScanner> scanFixture(final KeyValue[] ... kvArrays) {
         ArrayList<KeyValueScanner> scanners = new ArrayList<KeyValueScanner>();
         for (KeyValue[] kvs : kvArrays) {
             scanners.add(new KeyValueListScanner(KeyValue.COMPARATOR, kvs));
@@ -62,15 +64,16 @@ public class KeyValueListScanner implements KeyValueScanner {
     public KeyValue next() {
         KeyValue res = current;
 
-        if (iter.hasNext())
+        if (iter.hasNext()) {
             current = iter.next();
-        else
+        } else {
             current = null;
+        }
         return res;
     }
 
     @Override
-    public boolean seek(KeyValue key) {
+    public boolean seek(final KeyValue key) {
         // start at beginning.
         iter = data.iterator();
         int cmp;
@@ -88,7 +91,7 @@ public class KeyValueListScanner implements KeyValueScanner {
     }
 
     @Override
-    public boolean reseek(KeyValue key) {
+    public boolean reseek(final KeyValue key) {
         return seek(key);
     }
 
@@ -103,7 +106,7 @@ public class KeyValueListScanner implements KeyValueScanner {
      * 
      * @param sequenceId
      */
-    public void setSequenceID(long sequenceId) {
+    public void setSequenceID(final long sequenceId) {
         this.sequenceId = sequenceId;
     }
 
