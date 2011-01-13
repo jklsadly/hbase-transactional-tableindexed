@@ -13,33 +13,28 @@ package org.apache.hadoop.hbase.regionserver.tableindexed;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.ipc.HBaseRPCProtocolVersion;
 import org.apache.hadoop.hbase.ipc.IndexedRegionInterface;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
-import org.apache.hadoop.hbase.regionserver.wal.HLog;
-import org.apache.hadoop.util.Progressable;
 
 /**
  * RegionServer which maintains secondary indexes.
  **/
-public class IndexedRegionServer extends TransactionalRegionServer implements
-    IndexedRegionInterface {
+public class IndexedRegionServer extends TransactionalRegionServer implements IndexedRegionInterface {
 
-  public IndexedRegionServer(final Configuration conf) throws IOException,
-      InterruptedException {
-    super(conf);
-  }
-
-  @Override
-  public long getProtocolVersion(final String protocol, final long clientVersion)
-      throws IOException {
-    if (protocol.equals(IndexedRegionInterface.class.getName())) {
-      return HBaseRPCProtocolVersion.versionID;
+    public IndexedRegionServer(final Configuration conf) throws IOException, InterruptedException {
+        super(conf);
+        this.getRpcMetrics().createMetrics(new Class< ? >[] {
+            IndexedRegionInterface.class
+        });
     }
-    return super.getProtocolVersion(protocol, clientVersion);
-  }
+
+    @Override
+    public long getProtocolVersion(final String protocol, final long clientVersion) throws IOException {
+        if (protocol.equals(IndexedRegionInterface.class.getName())) {
+            return HBaseRPCProtocolVersion.versionID;
+        }
+        return super.getProtocolVersion(protocol, clientVersion);
+    }
 
 }

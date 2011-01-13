@@ -64,6 +64,9 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
      */
     public TransactionalRegionServer(final Configuration conf) throws IOException, InterruptedException {
         super(conf);
+        this.getRpcMetrics().createMetrics(new Class< ? >[] {
+            TransactionalRegionInterface.class
+        });
         cleanOldTransactionsThread = new CleanOldTransactionsChore(this);
         transactionLeases = new Leases(conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME), LEASE_CHECK_FREQUENCY);
         LOG.info("Transaction lease time: " + conf.getInt(LEASE_TIME, DEFAULT_LEASE_TIME));
