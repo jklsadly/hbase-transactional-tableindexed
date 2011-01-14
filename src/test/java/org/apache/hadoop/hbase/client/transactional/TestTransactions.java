@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.regionserver.transactional.SingleVersionDeleteNotSupported;
 import org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer;
 import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -191,8 +192,7 @@ public class TestTransactions {
     @Test
     // FIXME: This test is failing because the TransactionState.applyDeletes() method does not adequately handle the
     // deleting of most recent version of a column. It assumes delete of all versions.
-    @Ignore
-    public void testGetAfterDeleteColumnLatestVersion() throws IOException, CommitUnsuccessfulException {
+    public void testGetAfterDeleteColumnLatestVersion() throws IOException {
         Result row1_A = table.get(new Get(ROW1).addColumn(FAMILY, QUAL_A));
         int oldVersion = Bytes.toInt(row1_A.getValue(FAMILY, QUAL_A));
 
@@ -201,15 +201,12 @@ public class TestTransactions {
         TransactionState transactionState = transactionManager.beginTransaction();
 
         // Delete most recent version
-        table.delete(transactionState, new Delete(ROW1).deleteColumn(FAMILY, QUAL_A));
-
-        row1_A = table.get(transactionState, new Get(ROW1).addColumn(FAMILY, QUAL_A));
-        Assert.assertEquals(oldVersion, Bytes.toInt(row1_A.getValue(FAMILY, QUAL_A)));
-
-        transactionManager.tryCommit(transactionState);
-
-        row1_A = table.get(new Get(ROW1).addColumn(FAMILY, QUAL_A));
-        Assert.assertEquals(oldVersion, Bytes.toInt(row1_A.getValue(FAMILY, QUAL_A)));
+        try {
+            table.delete(transactionState, new Delete(ROW1).deleteColumn(FAMILY, QUAL_A));
+            Assert.fail();
+        } catch (SingleVersionDeleteNotSupported e) {
+            // expected
+        }
     }
 
     @Test
@@ -244,7 +241,7 @@ public class TestTransactions {
         int newValue = originalValue + 1;
 
         // Delete column
-        table.delete(transactionState, new Delete(ROW1).deleteColumn(FAMILY, QUAL_A));
+        table.delete(transactionState, new Delete(ROW1).deleteColumns(FAMILY, QUAL_A));
         Result row1_A = table.get(transactionState, new Get(ROW1).addColumn(FAMILY, QUAL_A));
         Assert.assertEquals(null, row1_A.getValue(FAMILY, QUAL_A));
 
@@ -428,7 +425,7 @@ public class TestTransactions {
 
         int value = Bytes.toInt(row1_A.getValue(FAMILY, QUAL_A));
 
-        table.delete(transactionState, new Delete(ROW1).deleteColumn(FAMILY, QUAL_A));
+        table.delete(transactionState, new Delete(ROW1).deleteColumns(FAMILY, QUAL_A));
 
         return transactionState;
     }

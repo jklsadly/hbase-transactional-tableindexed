@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.ScannerCallable;
 import org.apache.hadoop.hbase.client.ServerCallable;
 import org.apache.hadoop.hbase.ipc.TransactionalRegionInterface;
+import org.apache.hadoop.hbase.regionserver.transactional.SingleVersionDeleteNotSupported;
 import org.apache.hadoop.hbase.util.Bytes;
 
 /**
@@ -105,6 +106,7 @@ public class TransactionalTable extends HTable {
      * @since 0.20.0
      */
     public void delete(final TransactionState transactionState, final Delete delete) throws IOException {
+        SingleVersionDeleteNotSupported.validateDelete(delete);
         super.getConnection().getRegionServerWithRetries(
             new TransactionalServerCallable<Object>(super.getConnection(), super.getTableName(), delete.getRow(),
                     transactionState) {

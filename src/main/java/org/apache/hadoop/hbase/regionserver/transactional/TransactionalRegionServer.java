@@ -292,6 +292,9 @@ public class TransactionalRegionServer extends HRegionServer implements Transact
      */
     @Override
     public void delete(final long transactionId, final byte[] regionName, final Delete delete) throws IOException {
+
+        SingleVersionDeleteNotSupported.validateDelete(delete);
+
         getTransactionalRegion(regionName).delete(transactionId, delete);
     }
 
