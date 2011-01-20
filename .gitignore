@@ -3,4 +3,5 @@
 /.settings
 /.checkstyle
 /.fbprefs
-/.hg
+/.hg/
+/.hgignore
