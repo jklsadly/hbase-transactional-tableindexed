@@ -7,11 +7,12 @@ Recently updated to work the HBase 0.89.0-SNAPSHOT trunk. Most tests pass but un
 Working Features:
 
 * Ability to create manage and query with pre-defined table indexes.
-* Ability to perform multiple HBase operations with ACID transactions.
+* Ability to perform multiple HBase operations within serialized and atomic JTA transactions.
 
 Known limitations:
 * Currently combining non-transactional puts and transactional operations on the same table may have undesirable side-effects. We still need to test and account for this.
 * Doing a transactional Delete.addColumn() behaves like a Delete.addColumns() so it isn't possible to just delete the latest version of a cell.
+* Transactional support for batch operations (multi(MultiAction)) not implemented.
 * We need better documentation!
 
 Installation:
