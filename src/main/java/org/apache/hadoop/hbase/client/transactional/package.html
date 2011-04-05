@@ -23,7 +23,7 @@
 <head />
 <body bgcolor="white">
 
-This package provides support for atomic transactions. Transactions can
+This package provides support for serialized atomic transactions. Transactions can
 span multiple regions. Transaction writes are applied when committing a
 transaction. At commit time, the transaction is examined to see if it
 can be applied while still maintaining atomicity. This is done by
@@ -38,17 +38,19 @@ by Kung and Robinson available
 <a href=http://www.seas.upenn.edu/~zives/cis650/papers/opt-cc.pdf> here </a>.
 
 <p> To enable transactions, modify hbase-site.xml to turn on the
-TransactionalRegionServer.  This is done by setting
-<i>hbase.regionserver.class</i> to
-<i>org.apache.hadoop.hbase.ipc.TransactionalRegionInterface</i> and
-<i>hbase.regionserver.impl </i> to
-<i>org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer</i>
+TransactionalRegionServer.  This is done by setting properties:
+<ul>
+  <li><i>hbase.regionserver.class</i> to <i>org.apache.hadoop.hbase.ipc.TransactionalRegionInterface</i></li>
+  <li><i>hbase.regionserver.impl </i> to <i>org.apache.hadoop.hbase.regionserver.transactional.TransactionalRegionServer</i></li>
+  <li><i>hbase.hregion.impl</i> to <i>org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegion</i></li>
+  <li><i>hbase.hlog.splitter.impl</i> to <i>org.apache.hadoop.hbase.regionserver.transactional.THLogSplitter</i></li>
+</ul>
 
 
-<p> 
+<p>
 The read set claimed by a transactional scanner is determined from the start and
- end keys which the scanner is opened with. 
-
+ end keys which the scanner is opened with. Any concurrent writes on this range by other transactions will prevent the read transaction from committing.
+</p>
 
 </body>
 </html>

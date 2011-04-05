@@ -5,10 +5,10 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.apache</groupId>
 	<artifactId>hbase-trx</artifactId>
-	<version>0.90.0</version>
+	<version>0.90.0RC3</version>
 	<packaging>jar</packaging>
 	<name>hbase-trx</name>
-	<description>transactional/indexing layers on top of hbase</description>
+	<description>Hbase-trx is an HBase extension that provides serialzied transactions and indexed tables.</description>
 	
 	<properties>
 		<hbase.version>0.90.0</hbase.version>

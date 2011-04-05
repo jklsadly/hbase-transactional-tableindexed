@@ -44,30 +44,5 @@ IndexedRegionServer.  This is done by setting
 <i>hbase.regionserver.impl </i> to
 <i>org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegionServer</i>
 
-RowBasedIndexSpecification is a specialized IndexSpecification class for
-creating row-based secondary index tables. Base table rows with the same
-indexed column value have their row keys stored as column qualifiers on
-the same secondary index table row. The key for that row is the indexed
-column value from the base table. This allows to avoid expensive
-secondary index table scans and provides faster access for applications
-such as foreign key indexing or queries such as "find all table A rows
-whose familyA:columnB value is X". RowBasedIndexSpecification indices
-can be scanned using the API on RowBasedIndexedTable. The metadata for
-RowBasedIndexSpecification differ from IndexSpecification in that:
-
-<li> only a single base table column can be indexed per RowBasedIndexSpecification. 
-No additional columns are put in the index table.
-<br> and 
-<li> RowBasedIndexKeyGenerator, which constructs the index-row-key from the indexed 
-column value in the original column, is always used.
-
-For a simple RowBasedIndexSpecification example, look at the TestRowBasedIndexedTable unit test in org.apache.hadoop.hbase.client.tableIndexed.
-
-<p> To enable RowBasedIndexSpecification indexing, modify hbase-site.xml to turn on the
-IndexedRegionServer.  This is done by setting
-<i>hbase.regionserver.class</i> to
-<i>org.apache.hadoop.hbase.ipc.IndexedRegionInterface</i> and
-<i>hbase.regionserver.impl </i> to
-<i>org.apache.hadoop.hbase.regionserver.tableindexed.RowBasedIndexedRegionServer</i>
 </body>
 </html>
