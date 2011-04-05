@@ -17,7 +17,6 @@ import java.util.Random;
 
 import junit.framework.Assert;
 
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -31,7 +30,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.RowLock;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.regionserver.tableindexed.IndexedRegionServer;
 import org.apache.hadoop.hbase.test.HBaseTrxTestUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.AfterClass;
@@ -92,11 +90,10 @@ public class TestIndexedTable {
         indexDesc.addIndex(colAIndex);
 
         admin = new IndexedTableAdmin(TEST_UTIL.getConfiguration());
+        admin.setBatchSize(NUM_ROWS / 3); // To fully test re-indexing
         admin.createIndexedTable(indexDesc);
         table = new IndexedTable(TEST_UTIL.getConfiguration(), desc.getName());
     }
-
-
 
     @Test
     public void testInitialWrites() throws IOException {
@@ -104,12 +101,23 @@ public class TestIndexedTable {
         assertRowsInOrder(NUM_ROWS);
     }
 
-
     @Test
     public void testMultipleWrites() throws IOException {
         writeInitalRows();
         writeInitalRows(); // Update the rows.
         writeRowsMultiPut(); // Update the rows.
+        assertRowsInOrder(NUM_ROWS);
+    }
+
+    @Test
+    public void testRemoveAddReIndex() throws IOException {
+        IndexSpecification index = table.getIndexedTableDescriptor().getIndexes().iterator().next();
+        admin.removeIndex(table.getTableName(), index.getIndexId());
+
+        Assert.assertFalse(admin.tableExists(index.getIndexedTableName(table.getTableName())));
+
+        admin.addIndex(table.getTableName(), index);
+
         assertRowsInOrder(NUM_ROWS);
     }
 
@@ -130,8 +138,6 @@ public class TestIndexedTable {
         updateRow(row, value);
         assertRowUpdated(row, value);
     }
-
-
 
     @Test
     public void testLockedRowUpdate() throws IOException {
@@ -214,13 +220,14 @@ public class TestIndexedTable {
             if (Bytes.toString(row).equals(Bytes.toString(PerformanceEvaluation.format(updatedRow)))) {
                 persistedRowValue = value;
                 LOG.info("update found: row [" + Bytes.toString(row) + "] value [" + Bytes.toString(value) + "]");
-            } else
+            } else {
                 LOG.info("updated index scan : row [" + Bytes.toString(row) + "] value [" + Bytes.toString(value) + "]");
+            }
         }
         scanner.close();
 
-        Assert.assertEquals(Bytes.toString(PerformanceEvaluation.format(expectedRowValue)), Bytes
-                .toString(persistedRowValue));
+        Assert.assertEquals(Bytes.toString(PerformanceEvaluation.format(expectedRowValue)),
+            Bytes.toString(persistedRowValue));
     }
 
     private void assertRowDeleted(final int numRowsExpected) throws IndexNotFoundException, IOException {

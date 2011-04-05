@@ -42,7 +42,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class IndexedTableAdmin extends HBaseAdmin {
 
     private static final Log LOG = LogFactory.getLog(IndexedTableAdmin.class);
-    private static final int BATCH_SIZE = 100;
+    private static final int DEFAULT_BATCH_SIZE = 100;
+    private int batchSize = DEFAULT_BATCH_SIZE;
 
     /**
      * Constructor
@@ -100,15 +101,17 @@ public class IndexedTableAdmin extends HBaseAdmin {
         IndexedTableDescriptor indexDesc = new IndexedTableDescriptor(desc);
         IndexSpecification spec = indexDesc.getIndex(indexId);
         indexDesc.removeIndex(indexId);
-        this.disableTable(spec.getIndexedTableName(baseTableName));
-        this.deleteTable(spec.getIndexedTableName(baseTableName));
+        byte[] indexTableName = spec.getIndexedTableName(baseTableName);
+        this.disableTable(indexTableName);
+        this.deleteTable(indexTableName);
         super.modifyTable(baseTableName, desc);
         super.enableTable(baseTableName);
+        LOG.info("Dropped index " + Bytes.toString(indexTableName));
     }
 
     /** Add an index to a table. */
     public void addIndex(final byte[] baseTableName, final IndexSpecification indexSpec) throws IOException {
-        LOG.warn("Adding index [" + indexSpec.getIndexId() + "] to existing table [" + Bytes.toString(baseTableName)
+        LOG.info("Adding index [" + indexSpec.getIndexId() + "] to existing table [" + Bytes.toString(baseTableName)
                 + "], this may take a long time");
         // TODO, make table read-only
         LOG.warn("Not putting table in readonly, if its being written to, the index may get out of sync");
@@ -126,7 +129,7 @@ public class IndexedTableAdmin extends HBaseAdmin {
         HTable baseTable = new HTable(baseTableName);
         HTable indexTable = new HTable(indexSpec.getIndexedTableName(baseTableName));
         Scan scan = new Scan();
-        List<Put> batch = new ArrayList<Put>(BATCH_SIZE);
+        List<Put> batch = new ArrayList<Put>(batchSize + 1);
         scan.addColumns(indexSpec.getAllColumns());
         for (Result rowResult : baseTable.getScanner(scan)) {
             SortedMap<byte[], byte[]> columnValues = new TreeMap<byte[], byte[]>(Bytes.BYTES_COMPARATOR);
@@ -139,7 +142,7 @@ public class IndexedTableAdmin extends HBaseAdmin {
             if (IndexMaintenanceUtils.doesApplyToIndex(indexSpec, columnValues)) {
                 Put indexUpdate = IndexMaintenanceUtils.createIndexUpdate(indexSpec, rowResult.getRow(), columnValues);
                 batch.add(indexUpdate);
-                if (batch.size() >= BATCH_SIZE) {
+                if (batch.size() >= batchSize) {
                     flushBatch(batch, indexTable);
                 }
             }
@@ -152,6 +155,16 @@ public class IndexedTableAdmin extends HBaseAdmin {
     private void flushBatch(final List<Put> batch, final HTable indexTable) throws IOException {
         if (!batch.isEmpty()) {
             indexTable.put(batch);
+            batch.clear();
         }
+    }
+
+    /**
+     * Set the batch size with which to write to the index when re-indexing. If not specified, DEFAULT_BATCH_SIZE used.
+     * 
+     * @param batchSize The batchSize to set.
+     */
+    public void setBatchSize(final int batchSize) {
+        this.batchSize = batchSize;
     }
 }
