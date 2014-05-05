@@ -1,4 +1,4 @@
-This project is a transactional and indexing extension for hbase. But it is not compatiable with new version of HBase.
+This project is a indexing extension for hbase. But it is not compatiable with new version of HBase.
 
 Current status:
 
@@ -7,22 +7,14 @@ Now I'm working with HBase 0.98 by using coprocessor.
 Working Features:
 
 * Ability to create manage and query with pre-defined table indexes.
-* Ability to perform multiple HBase operations within serialized and atomic JTA transactions.
-
-Known limitations and issues:
-https://github.com/hbase-trx/hbase-transactional-tableindexed/issues
 
 Installation:
  Drop the jar in the classpath of your application
  
 Configuration: 
-To enable the extension in hbase-site.xml: 
-
- 
- 
- To further enable indexing use the above configuration except for the following replacements:
- 
+ To enable indexing use the above configuration except for the following replacements:
+<property>
+	<name>hbase.coprocessor.region.classes</name>
+	<value>org.apache.hadoop.hbase.regionserver.tableindexed.IndexRegionObserver</value>
+</property>property
   
- Also, currently you have to manually create the GLOBAL_TRX_LOG table with HBaseBackedTransactionLogger.createTable() before you start using any transactions.
- 
- For more details, looks at the package.html in the appropriate client package of the source. 
