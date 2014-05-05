@@ -1,8 +1,8 @@
-This project is a transactional and indexing extension for hbase. 
+This project is a transactional and indexing extension for hbase. But it is not compatiable with new version of HBase.
 
 Current status:
 
-Now working with HBase 0.90.
+Now I'm working with HBase 0.98 by using coprocessor.
 
 Working Features:
 
